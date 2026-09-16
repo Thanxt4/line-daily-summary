@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>สรุปกลุ่มไลน์รายวัน</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1a1d23;
+    --muted: #6b7280;
+    --accent: #06c755; /* LINE green */
+    --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Thai", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--accent);
+    color: white;
+    padding: 20px 24px;
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; opacity: 0.9; font-size: 13px; }
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+  .controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  select, button {
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: white;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+  }
+  .card .date {
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .card .meta {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  .card .summary {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-size: 14px;
+  }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 0;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>สรุปกลุ่มไลน์รายวัน</h1>
+  <p>ดูสรุปบทสนทนาแต่ละวัน</p>
+</header>
+<div class="container">
+  <div class="controls">
+    <select id="groupSelect"><option value="">กำลังโหลดกลุ่ม...</option></select>
+    <button id="summarizeBtn">สรุปวันนี้ทันที</button>
+  </div>
+  <div id="list"></div>
+</div>
+
+<script>
+const groupSelect = document.getElementById('groupSelect');
+const list = document.getElementById('list');
+const summarizeBtn = document.getElementById('summarizeBtn');
+
+async function loadGroups() {
+  const res = await fetch('/api/groups');
+  const groups = await res.json();
+  if (groups.length === 0) {
+    groupSelect.innerHTML = '<option value="">ยังไม่มีกลุ่มที่เชื่อมต่อ</option>';
+    return;
+  }
+  groupSelect.innerHTML = groups
+    .map(g => `<option value="${g.group_id}">${g.group_name || g.group_id}</option>`)
+    .join('');
+  loadSummaries();
+}
+
+async function loadSummaries() {
+  const groupId = groupSelect.value;
+  if (!groupId) { list.innerHTML = '<div class="empty">เลือกกลุ่มเพื่อดูสรุป</div>'; return; }
+  list.innerHTML = '<div class="empty">กำลังโหลด...</div>';
+  const res = await fetch(`/api/summaries?group_id=${encodeURIComponent(groupId)}`);
+  const summaries = await res.json();
+  if (summaries.length === 0) {
+    list.innerHTML = '<div class="empty">ยังไม่มีสรุปสำหรับกลุ่มนี้</div>';
+    return;
+  }
+  list.innerHTML = summaries.map(s => `
+    <div class="card">
+      <div class="date">${s.date}</div>
+      <div class="meta">${s.message_count} ข้อความ</div>
+      <div class="summary">${escapeHtml(s.summary || '')}</div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+groupSelect.addEventListener('change', loadSummaries);
+
+summarizeBtn.addEventListener('click', async () => {
+  const groupId = groupSelect.value;
+  if (!groupId) { alert('เลือกกลุ่มก่อน'); return; }
+  summarizeBtn.disabled = true;
+  summarizeBtn.textContent = 'กำลังสรุป...';
+  try {
+    const res = await fetch('/api/summarize-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'สรุปไม่สำเร็จ');
+    await loadSummaries();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    summarizeBtn.disabled = false;
+    summarizeBtn.textContent = 'สรุปวันนี้ทันที';
+  }
+});
+
+loadGroups();
+</script>
+</body>
+</html>
