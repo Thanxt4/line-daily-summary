@@ -61,6 +61,8 @@ Railway เหมาะเพราะ: deploy จาก GitHub ได้ใน�
    - `LINE_CHANNEL_ACCESS_TOKEN`
    - `GEMINI_API_KEY`
    - `GEMINI_MODEL` (ใส่ `gemini-2.5-flash` หรือเว้นว่างได้ จะใช้ค่านี้เป็นค่าเริ่มต้น)
+   - `ADMIN_USERNAME` และ `ADMIN_PASSWORD` — บัญชีสำหรับล็อกอินเข้าหน้าแดชบอร์ด (ค่าเริ่มต้นคือ `admin` / `admin123` **ควรเปลี่ยนก่อนใช้งานจริง**)
+   - `SESSION_SECRET` — ตั้งเป็นข้อความยาวๆ สุ่มๆ อะไรก็ได้ (ใช้เข้ารหัส session ไม่ให้คนอื่นปลอมล็อกอิน)
 5. ไปที่แท็บ **Settings → Volumes** กด **New Volume** mount ที่ path `/app` (เพื่อให้ `data.db` ไม่หายเวลา deploy ใหม่)
 6. ไปที่แท็บ **Settings → Networking** กด **Generate Domain** จะได้ URL แบบ `https://xxxx.up.railway.app`
 7. รอ deploy เสร็จ (ดู log ในแท็บ Deployments)
@@ -88,10 +90,14 @@ Railway เหมาะเพราะ: deploy จาก GitHub ได้ใน�
 
 ## ขั้นตอนที่ 7: ดูสรุป
 
-เข้า `https://xxxx.up.railway.app/` จะเห็นหน้าแดชบอร์ด:
-- เลือกกลุ่มจาก dropdown (กลุ่มจะโผล่มาหลังจากมีข้อความแรกเข้ามา)
+เข้า `https://xxxx.up.railway.app/` จะเจอหน้า **เข้าสู่ระบบ** ก่อน — ล็อกอินด้วยค่าที่ตั้งไว้ใน `ADMIN_USERNAME` / `ADMIN_PASSWORD` (ค่าเริ่มต้นคือ `admin` / `admin123`)
+
+หลังล็อกอินแล้วจะเห็นหน้าแดชบอร์ด:
+- รายชื่อกลุ่มไลน์ที่เชื่อมต่ออยู่ทางเมนูซ้าย (กลุ่มจะโผล่มาหลังจากมีข้อความแรกเข้ามา)
+- เลือกกลุ่มเพื่อดูสรุปแต่ละวัน เรียงจากล่าสุดไปเก่าสุด
 - ระบบจะสรุปให้อัตโนมัติทุกคืนเวลา 23:55 น. (เวลาไทย)
 - หรือกดปุ่ม **"สรุปวันนี้ทันที"** เพื่อสรุปข้อความของวันนี้แบบสดๆ ได้ทุกเมื่อ
+- กด **"ออกจากระบบ"** ที่มุมล่างซ้ายเพื่อล็อกเอาต์
 
 ---
 
@@ -99,10 +105,11 @@ Railway เหมาะเพราะ: deploy จาก GitHub ได้ใน�
 
 ```
 line-daily-summary/
-├── server.js          # Express server: webhook, cron, API
+├── server.js          # Express server: webhook, cron, API, login/session
 ├── package.json
 ├── .env.example       # ตัวอย่างตัวแปรสภาพแวดล้อม
 ├── public/
+│   ├── login.html      # หน้าเข้าสู่ระบบ
 │   └── index.html      # หน้าแดชบอร์ดดูสรุป
 └── data.db             # ฐานข้อมูล SQLite (สร้างอัตโนมัติตอนรันครั้งแรก)
 ```
