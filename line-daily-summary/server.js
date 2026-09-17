@@ -87,9 +87,14 @@ async function getGroupSummary(groupId) {
     const resp = await fetch(`https://api.line.me/v2/bot/group/${groupId}/summary`, {
       headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`[getGroupSummary] LINE API returned ${resp.status}: ${errText}`);
+      return null;
+    }
     return await resp.json(); // { groupId, groupName, pictureUrl }
   } catch (e) {
+    console.error('[getGroupSummary] request failed:', e.message);
     return null;
   }
 }
