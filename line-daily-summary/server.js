@@ -69,16 +69,16 @@ function thaiDateString(tsMillis) {
 }
 
 async function getDisplayName(groupId, userId) {
-  if (!userId) return 'ไม่ทราบชื่อ';
+  if (!userId) return 'สมาชิกในกลุ่ม';
   try {
     const resp = await fetch(`https://api.line.me/v2/bot/group/${groupId}/member/${userId}`, {
       headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
-    if (!resp.ok) return userId;
+    if (!resp.ok) return `สมาชิก-${userId.slice(-4)}`;
     const data = await resp.json();
-    return data.displayName || userId;
+    return data.displayName || `สมาชิก-${userId.slice(-4)}`;
   } catch (e) {
-    return userId;
+    return `สมาชิก-${userId.slice(-4)}`;
   }
 }
 
@@ -176,14 +176,18 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
           `INSERT INTO messages (group_id, user_id, display_name, text, ts, date) VALUES (?, ?, ?, ?, ?, ?)`
         ).run(groupId, userId, displayName, text, ts, dateStr);
 
-        // Remember the group (and try to fetch its name) if we haven't seen it before
-        const existing = db.prepare(`SELECT group_id FROM groups WHERE group_id = ?`).get(groupId);
-        if (!existing) {
+        // เก็บชื่อกลุ่มไว้ — ถ้ายังไม่เคยดึงสำเร็จ (ชื่อยังเป็น ID อยู่) ให้ลองดึงใหม่ทุกครั้งที่มีข้อความเข้า
+        const existing = db.prepare(`SELECT group_id, group_name FROM groups WHERE group_id = ?`).get(groupId);
+        if (!existing || existing.group_name === groupId) {
           const summary = await getGroupSummary(groupId);
-          db.prepare(`INSERT OR IGNORE INTO groups (group_id, group_name) VALUES (?, ?)`).run(
-            groupId,
-            summary?.groupName || groupId
-          );
+          if (summary?.groupName) {
+            db.prepare(
+              `INSERT INTO groups (group_id, group_name) VALUES (?, ?)
+               ON CONFLICT(group_id) DO UPDATE SET group_name = excluded.group_name`
+            ).run(groupId, summary.groupName);
+          } else if (!existing) {
+            db.prepare(`INSERT OR IGNORE INTO groups (group_id, group_name) VALUES (?, ?)`).run(groupId, groupId);
+          }
         }
       }
     } catch (err) {
