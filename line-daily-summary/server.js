@@ -22,7 +22,10 @@ if (!GEMINI_API_KEY) {
 }
 
 // ---------- Database ----------
-const db = new Database(path.join(__dirname, 'data.db'));
+// Railway ตั้งค่า RAILWAY_VOLUME_MOUNT_PATH ให้อัตโนมัติเมื่อมีการแนบ Volume
+// ถ้ารันในเครื่องตัวเอง (ไม่มีตัวแปรนี้) จะเก็บไฟล์ไว้ในโฟลเดอร์เดียวกับ server.js แทน
+const DB_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+const db = new Database(path.join(DB_DIR, 'data.db'));
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
