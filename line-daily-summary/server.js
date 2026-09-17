@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const Database = require('better-sqlite3');
 const cron = require('node-cron');
+const session = require('express-session');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,6 +14,13 @@ const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const TZ_OFFSET_HOURS = 7; // Asia/Bangkok
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'please-change-this-secret';
+
+if (!process.env.SESSION_SECRET) {
+  console.warn('[warn] SESSION_SECRET ยังไม่ได้ตั้งค่าใน .env กำลังใช้ค่า default ซึ่งไม่ปลอดภัยสำหรับ production');
+}
 
 if (!CHANNEL_SECRET || !CHANNEL_ACCESS_TOKEN) {
   console.warn('[warn] LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN ยังไม่ได้ตั้งค่าใน .env');
@@ -186,6 +194,51 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
 
 // ---------- JSON API (for the dashboard) ----------
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 1000 * 60 * 60 * 12 } // 12 ชั่วโมง
+  })
+);
+
+// ---------- Login ----------
+app.get('/login', (req, res) => {
+  if (req.session?.loggedIn) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    req.session.loggedIn = true;
+    req.session.username = username;
+    return res.redirect('/');
+  }
+  return res.redirect('/login?error=1');
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));
+});
+
+// ---------- Auth guard (ป้องกันหน้าแดชบอร์ดและ API ทั้งหมด) ----------
+function requireAuth(req, res, next) {
+  if (req.session?.loggedIn) return next();
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  return res.redirect('/login');
+}
+
+app.get('/api/session', (req, res) => {
+  res.json({ loggedIn: !!req.session?.loggedIn, username: req.session?.username || null });
+});
+
+app.use(requireAuth);
 
 app.get('/api/groups', (req, res) => {
   const rows = db.prepare(`SELECT group_id, group_name FROM groups ORDER BY group_name`).all();
