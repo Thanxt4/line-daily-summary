@@ -86,6 +86,12 @@ db.exec(`
     date TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_images_group_date ON images(group_id, date);
+
+  CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    updated_at INTEGER
+  );
 `);
 
 // migration เล็กๆ เผื่อฐานข้อมูลเดิมสร้างไว้ก่อนที่จะมีคอลัมน์ image_refs
@@ -101,18 +107,42 @@ function thaiDateString(tsMillis) {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+const PLACEHOLDER_NAME_RE = /^สมาชิก-[a-zA-Z0-9]{4}$/;
+
+function getCachedDisplayName(userId) {
+  if (!userId) return null;
+  const row = db.prepare(`SELECT display_name FROM users WHERE user_id = ?`).get(userId);
+  return row?.display_name || null;
+}
+
+function cacheDisplayName(userId, displayName) {
+  if (!userId || !displayName || PLACEHOLDER_NAME_RE.test(displayName)) return;
+  db.prepare(
+    `INSERT INTO users (user_id, display_name, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, updated_at = excluded.updated_at`
+  ).run(userId, displayName, Date.now());
+}
+
 async function getDisplayName(groupId, userId) {
   if (!userId) return 'สมาชิกในกลุ่ม';
   try {
     const resp = await fetch(`https://api.line.me/v2/bot/group/${groupId}/member/${userId}`, {
       headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
-    if (!resp.ok) return `สมาชิก-${userId.slice(-4)}`;
-    const data = await resp.json();
-    return data.displayName || `สมาชิก-${userId.slice(-4)}`;
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.displayName) {
+        cacheDisplayName(userId, data.displayName);
+        return data.displayName;
+      }
+    } else {
+      console.error(`[getDisplayName] LINE API returned ${resp.status} for user ${userId}`);
+    }
   } catch (e) {
-    return `สมาชิก-${userId.slice(-4)}`;
+    console.error('[getDisplayName] request failed:', e.message);
   }
+  // เรียก LINE API ไม่สำเร็จ ลองใช้ชื่อล่าสุดที่เคยเรียกได้สำเร็จของ user นี้แทน placeholder
+  return getCachedDisplayName(userId) || `สมาชิก-${userId.slice(-4)}`;
 }
 
 async function getGroupSummary(groupId) {
@@ -436,6 +466,78 @@ app.post('/api/summarize-now', async (req, res) => {
       return res.status(404).json({ error: 'ไม่มีข้อความในวันนี้สำหรับกลุ่มนี้' });
     }
     res.json({ date: dateStr, summary });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- ซ่อมชื่อสมาชิกที่เคย fallback เป็น "สมาชิก-xxxx" ----------
+// ไล่หา user_id ที่มีชื่อเป็น placeholder ในกลุ่มนี้ แล้วลองเรียก LINE API ใหม่อีกครั้ง
+// ถ้าสำเร็จ จะอัปเดตชื่อใน messages (เฉพาะแถวที่ยังเป็น placeholder) และแคชไว้ใน users
+// resummarize=true จะสั่งสรุปซ้ำสำหรับวันที่มีการแก้ชื่อ เพื่อให้ตารางสรุปแสดงชื่อใหม่ด้วย
+app.post('/api/fix-names', async (req, res) => {
+  try {
+    const { group_id, resummarize } = req.body;
+    if (!group_id) return res.status(400).json({ error: 'group_id is required' });
+
+    const placeholderRows = db
+      .prepare(
+        `SELECT DISTINCT user_id FROM messages
+         WHERE group_id = ? AND user_id IS NOT NULL AND display_name LIKE 'สมาชิก-%'`
+      )
+      .all(group_id);
+
+    const fixed = [];
+    const stillUnresolved = [];
+
+    for (const row of placeholderRows) {
+      const userId = row.user_id;
+      let newName = null;
+      try {
+        const resp = await fetch(`https://api.line.me/v2/bot/group/${group_id}/member/${userId}`, {
+          headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.displayName) newName = data.displayName;
+        }
+      } catch (e) {
+        console.error('[fix-names] request failed:', e.message);
+      }
+
+      if (newName) {
+        db.prepare(
+          `UPDATE messages SET display_name = ?
+           WHERE group_id = ? AND user_id = ? AND display_name LIKE 'สมาชิก-%'`
+        ).run(newName, group_id, userId);
+        cacheDisplayName(userId, newName);
+        fixed.push({ user_id: userId, display_name: newName });
+      } else {
+        // สมาชิกออกจากกลุ่มไปแล้ว หรือ LINE API ยังเรียกไม่สำเร็จ
+        stillUnresolved.push(userId);
+      }
+    }
+
+    let resummarizedDates = [];
+    if (resummarize && fixed.length > 0) {
+      const dateRows = db
+        .prepare(
+          `SELECT DISTINCT date FROM messages
+           WHERE group_id = ? AND user_id IN (${fixed.map(() => '?').join(',')})`
+        )
+        .all(group_id, ...fixed.map((f) => f.user_id));
+      for (const d of dateRows) {
+        try {
+          await summarizeDate(group_id, d.date);
+          resummarizedDates.push(d.date);
+        } catch (err) {
+          console.error(`[fix-names] resummarize failed for ${d.date}`, err);
+        }
+      }
+    }
+
+    res.json({ fixed, still_unresolved: stillUnresolved, resummarized_dates: resummarizedDates });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
