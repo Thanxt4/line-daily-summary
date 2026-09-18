@@ -152,7 +152,7 @@ async function summarizeDate(groupId, dateStr) {
     .prepare(`SELECT message_id FROM images WHERE group_id = ? AND date = ? ORDER BY ts ASC`)
     .all(groupId, dateStr);
 
-  const promptText = `นี่คือบทสนทนาในกลุ่มไลน์วันที่ ${dateStr} (ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีรูปภาพแนบมาด้วย ตัวรูปจริงจะแนบต่อจากข้อความนี้ พร้อมกำกับ message id ไว้):\n\n${conversation}\n\nงานของคุณมี 2 ส่วน:\n\n1. สรุปบทสนทนาเป็นภาษาไทย จัดรูปแบบตามระบบ Harvard Outline (หัวข้อหลักใช้เลขโรมัน I. II. III. หัวข้อย่อยใช้ A. B. C. และย่อยลงไปอีกใช้ 1. 2. 3.) แบ่งเป็น:\nI. ประเด็นสำคัญที่คุยกัน\nII. การตัดสินใจ/ข้อสรุป (ถ้ามี)\nIII. สิ่งที่ต้องติดตามต่อ หรือ Action Items (ถ้ามี)\nถ้าหัวข้อไหนไม่มีเนื้อหาให้ใส่ "ไม่มี" และถ้าทั้งวันไม่มีสาระสำคัญเลยให้ระบุไว้ใต้หัวข้อ I. ตรงๆ\n\n2. จากรูปภาพที่แนบมา (ถ้ามี) เลือกเฉพาะรูปที่เกี่ยวข้องกับหัวข้อสำคัญในสรุปเท่านั้น (ไม่เกิน 5 รูป ข้ามรูปที่ไม่สำคัญ เช่น มีม รูปตลก สติกเกอร์ ภาพหน้าจอที่ไม่มีสาระ) ระบุ message id ของรูปที่เลือกให้ตรงกับที่กำกับไว้ พร้อมคำบรรยายสั้นๆ ว่าเกี่ยวข้องกับหัวข้อไหน\n\nตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอกเหนือจาก JSON ในรูปแบบ:\n{"summary": "...ข้อความสรุปแบบ Harvard Outline...", "important_images": [{"message_id": "...", "caption": "..."}]}\nถ้าไม่มีรูปที่เกี่ยวข้องเลย ให้ใส่ important_images เป็น array ว่าง []`;
+  const promptText = `นี่คือบทสนทนาในกลุ่มไลน์วันที่ ${dateStr} (ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีรูปภาพแนบมาด้วย ตัวรูปจริงจะแนบต่อจากข้อความนี้ พร้อมกำกับ message id ไว้):\n\n${conversation}\n\nงานของคุณมี 2 ส่วน:\n\n1. แยกประเด็น/เรื่องสำคัญที่คุยกันในวันนี้ออกเป็นรายการ แต่ละประเด็นให้สรุปตามหลัก 5W1H เป็นภาษาไทย โดยแต่ละฟิลด์ควรกระชับ (ไม่เกิน 1-2 ประโยค) ถ้าบทสนทนาไม่ได้ระบุข้อมูลของฟิลด์ไหนไว้ชัดเจน ให้ใส่ "ไม่ระบุ":\n- what: เกิดอะไรขึ้น / ประเด็นคืออะไร\n- who: ใครเกี่ยวข้อง (บุคคล/ทีม/แผนก)\n- when: เกิดขึ้นเมื่อไหร่ หรือกำหนดจะทำเมื่อไหร่\n- where: เกิดขึ้นที่ไหน (สถานที่/เครื่องจักร/ไลน์ผลิต ฯลฯ)\n- why: ทำไมถึงเกิดขึ้น หรือเหตุผล/สาเหตุ\n- how: แก้ไข/ดำเนินการอย่างไร หรือ Action Item ที่ต้องติดตามต่อ\nถ้าทั้งวันไม่มีสาระสำคัญเลย ให้ตอบ topics เป็น array ว่าง []\n\n2. จากรูปภาพที่แนบมา (ถ้ามี) เลือกเฉพาะรูปที่เกี่ยวข้องกับประเด็นสำคัญเท่านั้น (ไม่เกิน 5 รูป ข้ามรูปที่ไม่สำคัญ เช่น มีม รูปตลก สติกเกอร์ ภาพหน้าจอที่ไม่มีสาระ) ระบุ message id ของรูปที่เลือกให้ตรงกับที่กำกับไว้ พร้อมคำบรรยายสั้นๆ ว่าเกี่ยวข้องกับประเด็นไหน\n\nตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอกเหนือจาก JSON ในรูปแบบ:\n{"topics": [{"what": "...", "who": "...", "when": "...", "where": "...", "why": "...", "how": "..."}], "important_images": [{"message_id": "...", "caption": "..."}]}\nถ้าไม่มีรูปที่เกี่ยวข้องเลย ให้ใส่ important_images เป็น array ว่าง []`;
 
   const parts = [{ text: promptText }];
   for (const img of imageRows) {
@@ -194,14 +194,20 @@ async function summarizeDate(groupId, dateStr) {
     .join('')
     .trim();
 
-  let summaryText = rawText;
+  // เก็บผลลัพธ์เป็น JSON string ของ { topics: [...] } ไว้ในคอลัมน์ summary
+  // ฝั่งหน้าเว็บ (public/index.html) จะ parse ค่านี้เพื่อวาดเป็นตาราง 5W1H
+  let summaryText = JSON.stringify({ topics: [] });
   let importantImages = [];
   try {
     const parsed = JSON.parse(rawText);
-    summaryText = parsed.summary || rawText;
+    const topics = Array.isArray(parsed.topics) ? parsed.topics : [];
+    summaryText = JSON.stringify({ topics });
     importantImages = Array.isArray(parsed.important_images) ? parsed.important_images : [];
   } catch (e) {
-    console.error('[summarizeDate] แปลง JSON จาก Gemini ไม่สำเร็จ ใช้ข้อความดิบแทน:', e.message);
+    console.error('[summarizeDate] แปลง JSON จาก Gemini ไม่สำเร็จ เก็บข้อความดิบไว้แทน:', e.message);
+    // เผื่อ Gemini ตอบไม่เป็น JSON ที่ถูกต้อง ให้เก็บข้อความดิบไว้ใน field "raw"
+    // หน้าเว็บจะ fallback ไปแสดงเป็นข้อความธรรมดาแทนตาราง
+    summaryText = JSON.stringify({ topics: [], raw: rawText });
   }
 
   db.prepare(
