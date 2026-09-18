@@ -13,7 +13,15 @@ const PORT = process.env.PORT || 3000;
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+// รายชื่อโมเดลสำรอง เรียงจากลำดับที่จะลองก่อน-หลัง คั่นด้วยจุลภาคใน .env
+// เช่น GEMINI_MODEL_FALLBACKS=gemini-3.1-flash-lite,gemini-3.6-flash
+// ถ้าโมเดลหลัก (GEMINI_MODEL) โดน 429/RESOURCE_EXHAUSTED จะไล่ลองตัวถัดไปในลิสต์นี้อัตโนมัติ
+const GEMINI_MODEL_FALLBACKS = (process.env.GEMINI_MODEL_FALLBACKS || 'gemini-3.1-flash-lite,gemini-3.6-flash')
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+const GEMINI_MODEL_CHAIN = [GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS.filter((m) => m !== GEMINI_MODEL)];
 const TZ_OFFSET_HOURS = 7; // Asia/Bangkok
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -139,6 +147,60 @@ async function ensureGroupName(groupId) {
   }
 }
 
+// เรียก Gemini โดยไล่ลองทีละโมเดลใน GEMINI_MODEL_CHAIN
+// ถ้าเจอ 429 (RESOURCE_EXHAUSTED / โควตาเต็ม) จะข้ามไปลองโมเดลถัดไปทันที
+// ถ้าเป็น error อื่น (เช่น API key ผิด, prompt มีปัญหา) จะโยน error ออกไปเลยไม่ลองต่อ
+async function callGeminiWithFallback(parts) {
+  let lastError = null;
+
+  for (let i = 0; i < GEMINI_MODEL_CHAIN.length; i++) {
+    const model = GEMINI_MODEL_CHAIN[i];
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': GEMINI_API_KEY
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts }],
+            generationConfig: { responseMimeType: 'application/json' }
+          })
+        }
+      );
+
+      if (resp.ok) {
+        if (i > 0) {
+          console.log(`[callGeminiWithFallback] ใช้โมเดลสำรอง "${model}" สำเร็จ (โมเดลหลักโดนจำกัด)`);
+        }
+        return await resp.json();
+      }
+
+      const errText = await resp.text();
+      const isQuotaError = resp.status === 429;
+      lastError = new Error(`Gemini API error (${model}): ${resp.status} ${errText}`);
+
+      if (isQuotaError && i < GEMINI_MODEL_CHAIN.length - 1) {
+        console.warn(`[callGeminiWithFallback] โมเดล "${model}" โดนจำกัดโควตา (429) กำลังลองโมเดลถัดไป...`);
+        continue; // ลองโมเดลถัดไป
+      }
+
+      // error อื่นที่ไม่ใช่โควตา หรือหมดรายการโมเดลแล้ว ให้โยน error ออกไปเลย
+      throw lastError;
+    } catch (e) {
+      lastError = e;
+      // ถ้า error ไม่ใช่ quota error (เช่น network error) และยังมีโมเดลเหลือ ก็ยังลองต่อได้
+      if (i === GEMINI_MODEL_CHAIN.length - 1) {
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError || new Error('ไม่สามารถเรียก Gemini API ได้ (ไม่มีโมเดลในรายการ)');
+}
+
 async function summarizeDate(groupId, dateStr) {
   const rows = db
     .prepare(`SELECT display_name, text FROM messages WHERE group_id = ? AND date = ? ORDER BY ts ASC`)
@@ -148,47 +210,11 @@ async function summarizeDate(groupId, dateStr) {
 
   const conversation = rows.map((r) => `${r.display_name || 'ไม่ทราบชื่อ'}: ${r.text}`).join('\n');
 
-  const imageRows = db
-    .prepare(`SELECT message_id FROM images WHERE group_id = ? AND date = ? ORDER BY ts ASC`)
-    .all(groupId, dateStr);
-
-  const promptText = `นี่คือบทสนทนาในกลุ่มไลน์วันที่ ${dateStr} (ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีรูปภาพแนบมาด้วย ตัวรูปจริงจะแนบต่อจากข้อความนี้ พร้อมกำกับ message id ไว้):\n\n${conversation}\n\nงานของคุณมี 2 ส่วน:\n\n1. แยกประเด็น/เรื่องสำคัญที่คุยกันในวันนี้ออกเป็นรายการ แต่ละประเด็นให้สรุปตามหลัก 5W1H เป็นภาษาไทย โดยแต่ละฟิลด์ควรกระชับ (ไม่เกิน 1-2 ประโยค) ถ้าบทสนทนาไม่ได้ระบุข้อมูลของฟิลด์ไหนไว้ชัดเจน ให้ใส่ "ไม่ระบุ":\n- what: เกิดอะไรขึ้น / ประเด็นคืออะไร\n- who: ใครเกี่ยวข้อง (บุคคล/ทีม/แผนก)\n- when: เกิดขึ้นเมื่อไหร่ หรือกำหนดจะทำเมื่อไหร่\n- where: เกิดขึ้นที่ไหน (สถานที่/เครื่องจักร/ไลน์ผลิต ฯลฯ)\n- why: ทำไมถึงเกิดขึ้น หรือเหตุผล/สาเหตุ\n- how: แก้ไข/ดำเนินการอย่างไร หรือ Action Item ที่ต้องติดตามต่อ\nถ้าทั้งวันไม่มีสาระสำคัญเลย ให้ตอบ topics เป็น array ว่าง []\n\n2. จากรูปภาพที่แนบมา (ถ้ามี) เลือกเฉพาะรูปที่เกี่ยวข้องกับประเด็นสำคัญเท่านั้น (ไม่เกิน 5 รูป ข้ามรูปที่ไม่สำคัญ เช่น มีม รูปตลก สติกเกอร์ ภาพหน้าจอที่ไม่มีสาระ) ระบุ message id ของรูปที่เลือกให้ตรงกับที่กำกับไว้ พร้อมคำบรรยายสั้นๆ ว่าเกี่ยวข้องกับประเด็นไหน\n\nตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอกเหนือจาก JSON ในรูปแบบ:\n{"topics": [{"what": "...", "who": "...", "when": "...", "where": "...", "why": "...", "how": "..."}], "important_images": [{"message_id": "...", "caption": "..."}]}\nถ้าไม่มีรูปที่เกี่ยวข้องเลย ให้ใส่ important_images เป็น array ว่าง []`;
+  const promptText = `นี่คือบทสนทนาในกลุ่มไลน์วันที่ ${dateStr} (ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีการส่งรูปภาพในเวลานั้น แต่ไม่ได้แนบตัวรูปมาให้วิเคราะห์):\n\n${conversation}\n\nแยกประเด็น/เรื่องสำคัญที่คุยกันในวันนี้ออกเป็นรายการ แต่ละประเด็นให้สรุปตามหลัก 5W1H เป็นภาษาไทย โดยแต่ละฟิลด์ควรกระชับ (ไม่เกิน 1-2 ประโยค) ถ้าบทสนทนาไม่ได้ระบุข้อมูลของฟิลด์ไหนไว้ชัดเจน ให้ใส่ "ไม่ระบุ":\n- what: เกิดอะไรขึ้น / ประเด็นคืออะไร\n- who: ใครเกี่ยวข้อง (บุคคล/ทีม/แผนก)\n- when: เกิดขึ้นเมื่อไหร่ หรือกำหนดจะทำเมื่อไหร่\n- where: เกิดขึ้นที่ไหน (สถานที่/เครื่องจักร/ไลน์ผลิต ฯลฯ)\n- why: ทำไมถึงเกิดขึ้น หรือเหตุผล/สาเหตุ\n- how: แก้ไข/ดำเนินการอย่างไร หรือ Action Item ที่ต้องติดตามต่อ\nถ้าทั้งวันไม่มีสาระสำคัญเลย ให้ตอบ topics เป็น array ว่าง []\n\nตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอกเหนือจาก JSON ในรูปแบบ:\n{"topics": [{"what": "...", "who": "...", "when": "...", "where": "...", "why": "...", "how": "..."}]}`;
 
   const parts = [{ text: promptText }];
-  for (const img of imageRows) {
-    try {
-      const filePath = path.join(IMAGES_DIR, `${img.message_id}.jpg`);
-      if (fs.existsSync(filePath)) {
-        const base64 = fs.readFileSync(filePath).toString('base64');
-        parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
-        parts.push({ text: `(รูปด้านบนนี้คือ message id: ${img.message_id})` });
-      }
-    } catch (e) {
-      console.error('[summarizeDate] อ่านไฟล์รูปไม่สำเร็จ:', e.message);
-    }
-  }
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    }
-  );
-
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`Gemini API error: ${resp.status} ${errText}`);
-  }
-
-  const data = await resp.json();
+  const data = await callGeminiWithFallback(parts);
   const rawText = (data.candidates?.[0]?.content?.parts || [])
     .map((p) => p.text || '')
     .join('')
@@ -197,12 +223,10 @@ async function summarizeDate(groupId, dateStr) {
   // เก็บผลลัพธ์เป็น JSON string ของ { topics: [...] } ไว้ในคอลัมน์ summary
   // ฝั่งหน้าเว็บ (public/index.html) จะ parse ค่านี้เพื่อวาดเป็นตาราง 5W1H
   let summaryText = JSON.stringify({ topics: [] });
-  let importantImages = [];
   try {
     const parsed = JSON.parse(rawText);
     const topics = Array.isArray(parsed.topics) ? parsed.topics : [];
     summaryText = JSON.stringify({ topics });
-    importantImages = Array.isArray(parsed.important_images) ? parsed.important_images : [];
   } catch (e) {
     console.error('[summarizeDate] แปลง JSON จาก Gemini ไม่สำเร็จ เก็บข้อความดิบไว้แทน:', e.message);
     // เผื่อ Gemini ตอบไม่เป็น JSON ที่ถูกต้อง ให้เก็บข้อความดิบไว้ใน field "raw"
@@ -211,14 +235,13 @@ async function summarizeDate(groupId, dateStr) {
   }
 
   db.prepare(
-    `INSERT INTO summaries (group_id, date, summary, message_count, created_at, image_refs)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO summaries (group_id, date, summary, message_count, created_at)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(group_id, date) DO UPDATE SET
        summary = excluded.summary,
        message_count = excluded.message_count,
-       created_at = excluded.created_at,
-       image_refs = excluded.image_refs`
-  ).run(groupId, dateStr, summaryText, rows.length, Date.now(), JSON.stringify(importantImages));
+       created_at = excluded.created_at`
+  ).run(groupId, dateStr, summaryText, rows.length, Date.now());
 
   return summaryText;
 }
