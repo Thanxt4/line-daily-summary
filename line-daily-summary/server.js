@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 const Database = require('better-sqlite3');
 const cron = require('node-cron');
 const session = require('express-session');
@@ -34,6 +35,13 @@ if (!GEMINI_API_KEY) {
 // ถ้ารันในเครื่องตัวเอง (ไม่มีตัวแปรนี้) จะเก็บไฟล์ไว้ในโฟลเดอร์เดียวกับ server.js แทน
 const DB_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const db = new Database(path.join(DB_DIR, 'data.db'));
+
+// โฟลเดอร์เก็บไฟล์รูปภาพที่ส่งเข้ากลุ่ม (อยู่ใน Volume เดียวกับฐานข้อมูล ไม่หายตอน deploy ใหม่)
+const IMAGES_DIR = path.join(DB_DIR, 'images');
+if (!fs.existsSync(IMAGES_DIR)) {
+  fs.mkdirSync(IMAGES_DIR, { recursive: true });
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +61,7 @@ db.exec(`
     summary TEXT,
     message_count INTEGER,
     created_at INTEGER,
+    image_refs TEXT,
     UNIQUE(group_id, date)
   );
 
@@ -60,7 +69,23 @@ db.exec(`
     group_id TEXT PRIMARY KEY,
     group_name TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    date TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_images_group_date ON images(group_id, date);
 `);
+
+// migration เล็กๆ เผื่อฐานข้อมูลเดิมสร้างไว้ก่อนที่จะมีคอลัมน์ image_refs
+try {
+  db.exec('ALTER TABLE summaries ADD COLUMN image_refs TEXT');
+} catch (e) {
+  // คอลัมน์มีอยู่แล้ว ไม่ต้องทำอะไร
+}
 
 // ---------- Helpers ----------
 function thaiDateString(tsMillis) {
@@ -99,6 +124,21 @@ async function getGroupSummary(groupId) {
   }
 }
 
+async function ensureGroupName(groupId) {
+  const existing = db.prepare(`SELECT group_id, group_name FROM groups WHERE group_id = ?`).get(groupId);
+  if (!existing || existing.group_name === groupId) {
+    const summary = await getGroupSummary(groupId);
+    if (summary?.groupName) {
+      db.prepare(
+        `INSERT INTO groups (group_id, group_name) VALUES (?, ?)
+         ON CONFLICT(group_id) DO UPDATE SET group_name = excluded.group_name`
+      ).run(groupId, summary.groupName);
+    } else if (!existing) {
+      db.prepare(`INSERT OR IGNORE INTO groups (group_id, group_name) VALUES (?, ?)`).run(groupId, groupId);
+    }
+  }
+}
+
 async function summarizeDate(groupId, dateStr) {
   const rows = db
     .prepare(`SELECT display_name, text FROM messages WHERE group_id = ? AND date = ? ORDER BY ts ASC`)
@@ -108,7 +148,25 @@ async function summarizeDate(groupId, dateStr) {
 
   const conversation = rows.map((r) => `${r.display_name || 'ไม่ทราบชื่อ'}: ${r.text}`).join('\n');
 
-  const prompt = `นี่คือบทสนทนาในกลุ่มไลน์วันที่ ${dateStr}:\n\n${conversation}\n\nช่วยสรุปเป็นภาษาไทย โดยจัดรูปแบบตามระบบ Harvard Outline (หัวข้อหลักใช้เลขโรมัน I. II. III. หัวข้อย่อยใช้ A. B. C. และรายละเอียดย่อยลงไปอีกใช้ 1. 2. 3. ตามลำดับ) แบ่งเป็นหัวข้อหลักดังนี้:\n\nI. ประเด็นสำคัญที่คุยกัน\nII. การตัดสินใจ/ข้อสรุป (ถ้ามี)\nIII. สิ่งที่ต้องติดตามต่อ หรือ Action Items (ถ้ามี — ระบุผู้รับผิดชอบเป็นหัวข้อย่อย A. B. C. ถ้าทราบชื่อ)\n\nถ้าหัวข้อไหนไม่มีเนื้อหา ให้ใส่ "ไม่มี" ไว้ใต้หัวข้อนั้น อย่าข้ามเลขหัวข้อไป และถ้าเนื้อหาทั้งวันไม่มีสาระสำคัญเลย (เช่น ทักทายทั่วไป) ให้ระบุไว้ใต้หัวข้อ I. ตรงๆ ว่าวันนี้ไม่มีประเด็นสำคัญ`;
+  const imageRows = db
+    .prepare(`SELECT message_id FROM images WHERE group_id = ? AND date = ? ORDER BY ts ASC`)
+    .all(groupId, dateStr);
+
+  const promptText = `นี่คือบทสนทนาในกลุ่มไลน์วันที่ ${dateStr} (ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีรูปภาพแนบมาด้วย ตัวรูปจริงจะแนบต่อจากข้อความนี้ พร้อมกำกับ message id ไว้):\n\n${conversation}\n\nงานของคุณมี 2 ส่วน:\n\n1. สรุปบทสนทนาเป็นภาษาไทย จัดรูปแบบตามระบบ Harvard Outline (หัวข้อหลักใช้เลขโรมัน I. II. III. หัวข้อย่อยใช้ A. B. C. และย่อยลงไปอีกใช้ 1. 2. 3.) แบ่งเป็น:\nI. ประเด็นสำคัญที่คุยกัน\nII. การตัดสินใจ/ข้อสรุป (ถ้ามี)\nIII. สิ่งที่ต้องติดตามต่อ หรือ Action Items (ถ้ามี)\nถ้าหัวข้อไหนไม่มีเนื้อหาให้ใส่ "ไม่มี" และถ้าทั้งวันไม่มีสาระสำคัญเลยให้ระบุไว้ใต้หัวข้อ I. ตรงๆ\n\n2. จากรูปภาพที่แนบมา (ถ้ามี) เลือกเฉพาะรูปที่เกี่ยวข้องกับหัวข้อสำคัญในสรุปเท่านั้น (ไม่เกิน 5 รูป ข้ามรูปที่ไม่สำคัญ เช่น มีม รูปตลก สติกเกอร์ ภาพหน้าจอที่ไม่มีสาระ) ระบุ message id ของรูปที่เลือกให้ตรงกับที่กำกับไว้ พร้อมคำบรรยายสั้นๆ ว่าเกี่ยวข้องกับหัวข้อไหน\n\nตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอกเหนือจาก JSON ในรูปแบบ:\n{"summary": "...ข้อความสรุปแบบ Harvard Outline...", "important_images": [{"message_id": "...", "caption": "..."}]}\nถ้าไม่มีรูปที่เกี่ยวข้องเลย ให้ใส่ important_images เป็น array ว่าง []`;
+
+  const parts = [{ text: promptText }];
+  for (const img of imageRows) {
+    try {
+      const filePath = path.join(IMAGES_DIR, `${img.message_id}.jpg`);
+      if (fs.existsSync(filePath)) {
+        const base64 = fs.readFileSync(filePath).toString('base64');
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
+        parts.push({ text: `(รูปด้านบนนี้คือ message id: ${img.message_id})` });
+      }
+    } catch (e) {
+      console.error('[summarizeDate] อ่านไฟล์รูปไม่สำเร็จ:', e.message);
+    }
+  }
 
   const resp = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
@@ -119,7 +177,8 @@ async function summarizeDate(groupId, dateStr) {
         'x-goog-api-key': GEMINI_API_KEY
       },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        contents: [{ role: 'user', parts }],
+        generationConfig: { responseMimeType: 'application/json' }
       })
     }
   );
@@ -130,19 +189,30 @@ async function summarizeDate(groupId, dateStr) {
   }
 
   const data = await resp.json();
-  const summaryText = (data.candidates?.[0]?.content?.parts || [])
+  const rawText = (data.candidates?.[0]?.content?.parts || [])
     .map((p) => p.text || '')
-    .join('\n')
+    .join('')
     .trim();
 
+  let summaryText = rawText;
+  let importantImages = [];
+  try {
+    const parsed = JSON.parse(rawText);
+    summaryText = parsed.summary || rawText;
+    importantImages = Array.isArray(parsed.important_images) ? parsed.important_images : [];
+  } catch (e) {
+    console.error('[summarizeDate] แปลง JSON จาก Gemini ไม่สำเร็จ ใช้ข้อความดิบแทน:', e.message);
+  }
+
   db.prepare(
-    `INSERT INTO summaries (group_id, date, summary, message_count, created_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO summaries (group_id, date, summary, message_count, created_at, image_refs)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(group_id, date) DO UPDATE SET
        summary = excluded.summary,
        message_count = excluded.message_count,
-       created_at = excluded.created_at`
-  ).run(groupId, dateStr, summaryText, rows.length, Date.now());
+       created_at = excluded.created_at,
+       image_refs = excluded.image_refs`
+  ).run(groupId, dateStr, summaryText, rows.length, Date.now(), JSON.stringify(importantImages));
 
   return summaryText;
 }
@@ -181,19 +251,41 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
           `INSERT INTO messages (group_id, user_id, display_name, text, ts, date) VALUES (?, ?, ?, ?, ?, ?)`
         ).run(groupId, userId, displayName, text, ts, dateStr);
 
-        // เก็บชื่อกลุ่มไว้ — ถ้ายังไม่เคยดึงสำเร็จ (ชื่อยังเป็น ID อยู่) ให้ลองดึงใหม่ทุกครั้งที่มีข้อความเข้า
-        const existing = db.prepare(`SELECT group_id, group_name FROM groups WHERE group_id = ?`).get(groupId);
-        if (!existing || existing.group_name === groupId) {
-          const summary = await getGroupSummary(groupId);
-          if (summary?.groupName) {
-            db.prepare(
-              `INSERT INTO groups (group_id, group_name) VALUES (?, ?)
-               ON CONFLICT(group_id) DO UPDATE SET group_name = excluded.group_name`
-            ).run(groupId, summary.groupName);
-          } else if (!existing) {
-            db.prepare(`INSERT OR IGNORE INTO groups (group_id, group_name) VALUES (?, ?)`).run(groupId, groupId);
+        await ensureGroupName(groupId);
+      } else if (event.type === 'message' && event.message?.type === 'image' && event.source?.type === 'group') {
+        const groupId = event.source.groupId;
+        const userId = event.source.userId;
+        const ts = event.timestamp;
+        const dateStr = thaiDateString(ts);
+        const messageId = event.message.id;
+        const displayName = await getDisplayName(groupId, userId);
+
+        // เก็บ placeholder ไว้ในลำดับข้อความ เพื่อให้บริบทเวลาเรียงถูกต้องตอนสรุป
+        db.prepare(
+          `INSERT INTO messages (group_id, user_id, display_name, text, ts, date) VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(groupId, userId, displayName, `[ส่งรูปภาพ: ${messageId}]`, ts, dateStr);
+
+        try {
+          const contentResp = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+            headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+          });
+          if (contentResp.ok) {
+            const buffer = Buffer.from(await contentResp.arrayBuffer());
+            fs.writeFileSync(path.join(IMAGES_DIR, `${messageId}.jpg`), buffer);
+            db.prepare(`INSERT INTO images (group_id, message_id, ts, date) VALUES (?, ?, ?, ?)`).run(
+              groupId,
+              messageId,
+              ts,
+              dateStr
+            );
+          } else {
+            console.error(`[image] ดาวน์โหลดรูปไม่สำเร็จ status ${contentResp.status}`);
           }
+        } catch (err) {
+          console.error('[image] ดาวน์โหลดรูปล้มเหลว:', err.message);
         }
+
+        await ensureGroupName(groupId);
       }
     } catch (err) {
       console.error('[webhook] error handling event', err);
@@ -249,6 +341,18 @@ app.get('/api/session', (req, res) => {
 
 app.use(requireAuth);
 
+app.get('/media/:filename', (req, res) => {
+  const filename = req.params.filename;
+  if (!/^[a-zA-Z0-9_-]+\.jpg$/.test(filename)) {
+    return res.status(400).send('invalid filename');
+  }
+  const filePath = path.join(IMAGES_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('not found');
+  }
+  res.sendFile(filePath);
+});
+
 app.get('/api/groups', (req, res) => {
   const rows = db.prepare(`SELECT group_id, group_name FROM groups ORDER BY group_name`).all();
   res.json(rows);
@@ -259,7 +363,18 @@ app.get('/api/summaries', (req, res) => {
   const rows = group_id
     ? db.prepare(`SELECT * FROM summaries WHERE group_id = ? ORDER BY date DESC`).all(group_id)
     : db.prepare(`SELECT * FROM summaries ORDER BY date DESC`).all();
-  res.json(rows);
+
+  const withImages = rows.map((r) => {
+    let images = [];
+    try {
+      images = r.image_refs ? JSON.parse(r.image_refs) : [];
+    } catch (e) {
+      images = [];
+    }
+    return { ...r, images: images.map((img) => ({ ...img, url: `/media/${img.message_id}.jpg` })) };
+  });
+
+  res.json(withImages);
 });
 
 app.post('/api/summarize-now', async (req, res) => {
