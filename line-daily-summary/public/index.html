@@ -161,6 +161,50 @@
   .btn-summarize:hover { background: var(--ink-700); }
   .btn-summarize:disabled { opacity: 0.55; cursor: default; }
 
+  /* ---------- Date range filter ---------- */
+  .date-range-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .date-range-bar label {
+    font-size: 12.5px;
+    color: var(--text-600);
+    margin-right: 4px;
+  }
+  .date-range-bar input[type="date"] {
+    font-family: 'Sarabun', sans-serif;
+    font-size: 13.5px;
+    color: var(--text-900);
+    background: #fff;
+    border: 1px solid var(--paper-200);
+    border-radius: 3px;
+    padding: 7px 9px;
+  }
+  .date-range-bar .range-sep {
+    color: var(--text-600);
+    font-size: 13px;
+  }
+  .btn-quick-range {
+    background: transparent;
+    border: 1px solid var(--paper-200);
+    color: var(--ink-800);
+    padding: 7px 12px;
+    border-radius: 3px;
+    font-family: 'Sarabun', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-quick-range:hover { background: var(--paper-100); }
+  .btn-quick-range.active {
+    background: var(--brass-500);
+    border-color: var(--brass-500);
+    color: var(--ink-900);
+    font-weight: 600;
+  }
+
   /* ---------- Ledger timeline ---------- */
   .ledger {
     position: relative;
@@ -325,6 +369,17 @@
         <button class="btn-summarize" id="summarizeBtn" disabled>สรุปวันนี้ทันที</button>
       </div>
 
+      <div class="date-range-bar">
+        <button type="button" class="btn-quick-range" id="quickToday">วันนี้</button>
+        <button type="button" class="btn-quick-range" id="quick7">7 วันล่าสุด</button>
+        <button type="button" class="btn-quick-range" id="quick30">30 วันล่าสุด</button>
+        <button type="button" class="btn-quick-range" id="quickAll">ทั้งหมด</button>
+        <label for="fromDate">จาก</label>
+        <input type="date" id="fromDate" />
+        <span class="range-sep">ถึง</span>
+        <input type="date" id="toDate" />
+      </div>
+
       <div id="content">
         <p class="state-msg">เลือกกลุ่มไลน์จากเมนูด้านซ้ายเพื่อดูสรุปประจำวัน</p>
       </div>
@@ -334,6 +389,41 @@
 <script>
 let currentGroupId = null;
 let currentGroupName = '';
+
+// วันที่ปัจจุบันตามเวลาไทย (Asia/Bangkok) รูปแบบ YYYY-MM-DD ให้ตรงกับที่เก็บใน DB
+function todayBangkok() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+function addDaysToDateStr(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+// ค่าเริ่มต้น: แสดงของวันนี้ก่อน
+let fromDate = todayBangkok();
+let toDate = todayBangkok();
+
+function setQuickRangeActive(id) {
+  document.querySelectorAll('.btn-quick-range').forEach((btn) => btn.classList.remove('active'));
+  if (id) document.getElementById(id)?.classList.add('active');
+}
+
+function applyDateRange(from, to, quickId) {
+  fromDate = from;
+  toDate = to;
+  document.getElementById('fromDate').value = from || '';
+  document.getElementById('toDate').value = to || '';
+  setQuickRangeActive(quickId);
+  if (currentGroupId) loadSummaries();
+}
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -449,10 +539,13 @@ async function loadSummaries() {
   const content = document.getElementById('content');
   content.innerHTML = '<p class="state-msg">กำลังโหลด...</p>';
   try {
-    const res = await api(`/api/summaries?group_id=${encodeURIComponent(currentGroupId)}`);
+    const params = new URLSearchParams({ group_id: currentGroupId });
+    if (fromDate) params.set('from', fromDate);
+    if (toDate) params.set('to', toDate);
+    const res = await api(`/api/summaries?${params.toString()}`);
     const summaries = await res.json();
     if (summaries.length === 0) {
-      content.innerHTML = '<p class="state-msg">ยังไม่มีสรุปสำหรับกลุ่มนี้ กดปุ่ม "สรุปวันนี้ทันที" เพื่อสร้างสรุปแรก</p>';
+      content.innerHTML = '<p class="state-msg">ไม่มีสรุปในช่วงวันที่ที่เลือกสำหรับกลุ่มนี้ ลองเปลี่ยนช่วงวันที่ หรือกดปุ่ม "สรุปวันนี้ทันที" เพื่อสร้างสรุปแรก</p>';
       return;
     }
     content.innerHTML = `<div class="ledger">${summaries
@@ -507,6 +600,33 @@ document.getElementById('summarizeBtn').addEventListener('click', async () => {
     btn.textContent = originalText;
   }
 });
+
+document.getElementById('fromDate').addEventListener('change', (e) => {
+  applyDateRange(e.target.value || null, toDate, null);
+});
+document.getElementById('toDate').addEventListener('change', (e) => {
+  applyDateRange(fromDate, e.target.value || null, null);
+});
+document.getElementById('quickToday').addEventListener('click', () => {
+  const t = todayBangkok();
+  applyDateRange(t, t, 'quickToday');
+});
+document.getElementById('quick7').addEventListener('click', () => {
+  const t = todayBangkok();
+  applyDateRange(addDaysToDateStr(t, -6), t, 'quick7');
+});
+document.getElementById('quick30').addEventListener('click', () => {
+  const t = todayBangkok();
+  applyDateRange(addDaysToDateStr(t, -29), t, 'quick30');
+});
+document.getElementById('quickAll').addEventListener('click', () => {
+  applyDateRange(null, null, 'quickAll');
+});
+
+// ตั้งค่าเริ่มต้นของ input ให้เป็นวันนี้ และไฮไลต์ปุ่ม "วันนี้"
+document.getElementById('fromDate').value = fromDate;
+document.getElementById('toDate').value = toDate;
+setQuickRangeActive('quickToday');
 
 loadGroups();
 </script>
