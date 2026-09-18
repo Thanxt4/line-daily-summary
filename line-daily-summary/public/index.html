@@ -160,6 +160,25 @@
   }
   .btn-summarize:hover { background: var(--ink-700); }
   .btn-summarize:disabled { opacity: 0.55; cursor: default; }
+  .btn-fix-names {
+    flex-shrink: 0;
+    background: transparent;
+    color: var(--ink-900);
+    border: 1px solid var(--paper-200);
+    padding: 11px 16px;
+    border-radius: 3px;
+    font-family: 'Sarabun', sans-serif;
+    font-size: 13.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-fix-names:hover { background: var(--paper-100); }
+  .btn-fix-names:disabled { opacity: 0.55; cursor: default; }
+  .header-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
 
   /* ---------- Date range filter ---------- */
   .date-range-bar {
@@ -366,7 +385,10 @@
           <h2 id="groupTitle">เลือกกลุ่มทางซ้าย</h2>
           <p id="groupSub">สรุปบทสนทนาประจำวันจะแสดงที่นี่</p>
         </div>
-        <button class="btn-summarize" id="summarizeBtn" disabled>สรุปวันนี้ทันที</button>
+        <div class="header-actions">
+          <button class="btn-fix-names" id="fixNamesBtn" disabled title="ซ่อมชื่อสมาชิกที่เคยแสดงเป็น สมาชิก-xxxx">ซ่อมชื่อสมาชิก</button>
+          <button class="btn-summarize" id="summarizeBtn" disabled>สรุปวันนี้ทันที</button>
+        </div>
       </div>
 
       <div class="date-range-bar">
@@ -480,6 +502,7 @@ function selectGroup(groupId, groupName, el) {
   document.getElementById('groupTitle').textContent = groupName;
   document.getElementById('groupSub').textContent = 'สรุปบทสนทนาประจำวัน เรียงจากล่าสุด';
   document.getElementById('summarizeBtn').disabled = false;
+  document.getElementById('fixNamesBtn').disabled = false;
   loadSummaries();
 }
 
@@ -592,6 +615,39 @@ document.getElementById('summarizeBtn').addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'สรุปไม่สำเร็จ');
+    await loadSummaries();
+  } catch (e) {
+    if (e.message !== 'unauthorized') alert(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+});
+
+document.getElementById('fixNamesBtn').addEventListener('click', async () => {
+  if (!currentGroupId) return;
+  const btn = document.getElementById('fixNamesBtn');
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'กำลังซ่อมชื่อ...';
+  try {
+    const res = await api('/api/fix-names', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: currentGroupId, resummarize: true })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'ซ่อมชื่อไม่สำเร็จ');
+    const fixedCount = data.fixed?.length || 0;
+    const unresolvedCount = data.still_unresolved?.length || 0;
+    if (fixedCount === 0 && unresolvedCount === 0) {
+      alert('ไม่พบชื่อสมาชิกที่ต้องซ่อมในกลุ่มนี้');
+    } else {
+      alert(
+        `แก้ไขชื่อสำเร็จ ${fixedCount} คน` +
+          (unresolvedCount > 0 ? `\nยังไม่สำเร็จ ${unresolvedCount} คน (อาจออกจากกลุ่มไปแล้ว)` : '')
+      );
+    }
     await loadSummaries();
   } catch (e) {
     if (e.message !== 'unauthorized') alert(e.message);
