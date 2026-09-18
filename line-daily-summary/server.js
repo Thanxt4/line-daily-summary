@@ -388,10 +388,30 @@ app.get('/api/groups', (req, res) => {
 });
 
 app.get('/api/summaries', (req, res) => {
-  const { group_id } = req.query;
-  const rows = group_id
-    ? db.prepare(`SELECT * FROM summaries WHERE group_id = ? ORDER BY date DESC`).all(group_id)
-    : db.prepare(`SELECT * FROM summaries ORDER BY date DESC`).all();
+  const { group_id, from, to } = req.query;
+
+  // ตรวจสอบรูปแบบวันที่ YYYY-MM-DD คร่าวๆ ป้องกัน query แปลกๆ หลุดเข้ามา
+  const isValidDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const fromDate = isValidDate(from) ? from : null;
+  const toDate = isValidDate(to) ? to : null;
+
+  const conditions = [];
+  const params = [];
+  if (group_id) {
+    conditions.push('group_id = ?');
+    params.push(group_id);
+  }
+  if (fromDate) {
+    conditions.push('date >= ?');
+    params.push(fromDate);
+  }
+  if (toDate) {
+    conditions.push('date <= ?');
+    params.push(toDate);
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const rows = db.prepare(`SELECT * FROM summaries ${whereClause} ORDER BY date DESC`).all(...params);
 
   const withImages = rows.map((r) => {
     let images = [];
