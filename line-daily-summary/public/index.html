@@ -122,7 +122,7 @@
   .main {
     flex: 1;
     padding: 40px 48px 60px;
-    max-width: 760px;
+    max-width: 1320px;
   }
   .main-header {
     display: flex;
@@ -225,26 +225,36 @@
   }
   table.summary-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
-    font-size: 13.5px;
-    min-width: 640px;
+    font-size: 12.5px;
+    min-width: 920px;
   }
   table.summary-table th,
   table.summary-table td {
     text-align: left;
     vertical-align: top;
-    padding: 10px 12px;
+    padding: 11px 13px;
     border-bottom: 1px solid var(--paper-200);
-    line-height: 1.55;
+    line-height: 1.6;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
   table.summary-table thead th {
     font-family: 'Kanit', sans-serif;
     font-weight: 600;
-    font-size: 12.5px;
+    font-size: 12px;
     color: var(--ink-900);
     background: var(--paper-200);
     white-space: nowrap;
   }
+  table.summary-table col.col-no { width: 34px; }
+  table.summary-table col.col-what { width: 19%; }
+  table.summary-table col.col-who { width: 15%; }
+  table.summary-table col.col-when { width: 10%; }
+  table.summary-table col.col-where { width: 13%; }
+  table.summary-table col.col-why { width: 19%; }
+  table.summary-table col.col-how { width: 20%; }
   table.summary-table tbody tr:last-child td { border-bottom: none; }
   table.summary-table tbody tr:hover { background: rgba(176, 141, 61, 0.08); }
   table.summary-table td.col-topic-no {
@@ -252,6 +262,7 @@
     font-weight: 600;
     color: var(--brass-600);
     white-space: nowrap;
+    text-align: center;
   }
   .entry-images {
     display: flex;
@@ -410,14 +421,17 @@ function renderSummaryBlock(summaryRaw) {
   }
 
   const fields = [
-    { key: 'what', label: 'อะไร (What)' },
-    { key: 'who', label: 'ใคร (Who)' },
-    { key: 'when', label: 'เมื่อไหร่ (When)' },
-    { key: 'where', label: 'ที่ไหน (Where)' },
-    { key: 'why', label: 'ทำไม (Why)' },
-    { key: 'how', label: 'อย่างไร (How)' }
+    { key: 'what', label: 'อะไร (What)', colClass: 'col-what' },
+    { key: 'who', label: 'ใคร (Who)', colClass: 'col-who' },
+    { key: 'when', label: 'เมื่อไหร่ (When)', colClass: 'col-when' },
+    { key: 'where', label: 'ที่ไหน (Where)', colClass: 'col-where' },
+    { key: 'why', label: 'ทำไม (Why)', colClass: 'col-why' },
+    { key: 'how', label: 'อย่างไร (How)', colClass: 'col-how' }
   ];
 
+  const colgroup = `<colgroup><col class="col-no" />${fields
+    .map((f) => `<col class="${f.colClass}" />`)
+    .join('')}</colgroup>`;
   const headerRow = `<tr><th>#</th>${fields.map((f) => `<th>${escapeHtml(f.label)}</th>`).join('')}</tr>`;
   const bodyRows = topics
     .map(
@@ -428,7 +442,7 @@ function renderSummaryBlock(summaryRaw) {
     )
     .join('');
 
-  return `<div class="summary-table-wrap"><table class="summary-table"><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table></div>`;
+  return `<div class="summary-table-wrap"><table class="summary-table">${colgroup}<thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table></div>`;
 }
 
 async function loadSummaries() {
