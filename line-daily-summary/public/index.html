@@ -212,6 +212,47 @@
     white-space: pre-wrap;
     color: var(--text-900);
   }
+  .entry-summary.empty {
+    color: var(--text-600);
+    font-style: italic;
+    white-space: normal;
+  }
+  .summary-table-wrap {
+    background: var(--paper-100);
+    border-radius: 3px;
+    padding: 6px;
+    overflow-x: auto;
+  }
+  table.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    min-width: 640px;
+  }
+  table.summary-table th,
+  table.summary-table td {
+    text-align: left;
+    vertical-align: top;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--paper-200);
+    line-height: 1.55;
+  }
+  table.summary-table thead th {
+    font-family: 'Kanit', sans-serif;
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--ink-900);
+    background: var(--paper-200);
+    white-space: nowrap;
+  }
+  table.summary-table tbody tr:last-child td { border-bottom: none; }
+  table.summary-table tbody tr:hover { background: rgba(176, 141, 61, 0.08); }
+  table.summary-table td.col-topic-no {
+    font-family: 'Kanit', sans-serif;
+    font-weight: 600;
+    color: var(--brass-600);
+    white-space: nowrap;
+  }
   .entry-images {
     display: flex;
     flex-wrap: wrap;
@@ -341,6 +382,55 @@ function selectGroup(groupId, groupName, el) {
   loadSummaries();
 }
 
+// รับค่า s.summary ซึ่งอาจเป็น:
+// 1) JSON string รูปแบบใหม่ { topics: [{what, who, when, where, why, how}], raw? }
+// 2) ข้อความธรรมดารูปแบบเก่า (Harvard Outline) จากก่อนอัปเดต
+// แล้ว render เป็นตาราง 5W1H หรือ fallback เป็นข้อความธรรมดา
+function renderSummaryBlock(summaryRaw) {
+  if (!summaryRaw) {
+    return '<div class="entry-summary empty">ไม่มีสาระสำคัญที่บันทึกไว้สำหรับวันนี้</div>';
+  }
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(summaryRaw);
+  } catch (e) {
+    // ไม่ใช่ JSON แปลว่าเป็นข้อมูลเก่ารูปแบบข้อความธรรมดา
+    return `<div class="entry-summary">${escapeHtml(summaryRaw)}</div>`;
+  }
+
+  const topics = Array.isArray(parsed?.topics) ? parsed.topics : [];
+
+  if (topics.length === 0) {
+    if (parsed?.raw) {
+      // Gemini ตอบไม่เป็น JSON ที่ใช้ได้ตอนสรุป เก็บข้อความดิบไว้ ให้ fallback แสดงแบบข้อความ
+      return `<div class="entry-summary">${escapeHtml(parsed.raw)}</div>`;
+    }
+    return '<div class="entry-summary empty">ไม่มีสาระสำคัญที่บันทึกไว้สำหรับวันนี้</div>';
+  }
+
+  const fields = [
+    { key: 'what', label: 'อะไร (What)' },
+    { key: 'who', label: 'ใคร (Who)' },
+    { key: 'when', label: 'เมื่อไหร่ (When)' },
+    { key: 'where', label: 'ที่ไหน (Where)' },
+    { key: 'why', label: 'ทำไม (Why)' },
+    { key: 'how', label: 'อย่างไร (How)' }
+  ];
+
+  const headerRow = `<tr><th>#</th>${fields.map((f) => `<th>${escapeHtml(f.label)}</th>`).join('')}</tr>`;
+  const bodyRows = topics
+    .map(
+      (t, idx) => `<tr>
+        <td class="col-topic-no">${idx + 1}</td>
+        ${fields.map((f) => `<td>${escapeHtml(t?.[f.key] || 'ไม่ระบุ')}</td>`).join('')}
+      </tr>`
+    )
+    .join('');
+
+  return `<div class="summary-table-wrap"><table class="summary-table"><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table></div>`;
+}
+
 async function loadSummaries() {
   const content = document.getElementById('content');
   content.innerHTML = '<p class="state-msg">กำลังโหลด...</p>';
@@ -357,7 +447,7 @@ async function loadSummaries() {
       <div class="entry">
         <p class="entry-date">${formatThaiDate(s.date)}</p>
         <p class="entry-meta">${s.message_count} ข้อความ</p>
-        <div class="entry-summary">${escapeHtml(s.summary || '')}</div>
+        ${renderSummaryBlock(s.summary)}
         ${
           s.images && s.images.length > 0
             ? `<div class="entry-images">${s.images
