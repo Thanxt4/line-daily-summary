@@ -703,6 +703,8 @@ cron.schedule('55 23 * * *', async () => {
 }, { timezone: 'Asia/Bangkok' });
 
 // ---------- Static ----------
-app.use(express.static(path.join(__dirname, 'public')));
-
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1d',
+  etag: false
+}));
 app.listen(PORT, () => console.log(`i-Tail Insight running on http://localhost:${PORT}`));
