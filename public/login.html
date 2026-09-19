@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>เข้าสู่ระบบ — i-Tail Insight</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>" />
+<style>
+  :root {
+    --primary: #0072C6;
+    --primary-dark: #005A9E;
+    --primary-light: #E8F4FD;
+    --accent: #F97316;
+    --white: #FFFFFF;
+    --gray-50: #F8FAFC;
+    --gray-300: #CBD5E1;
+    --gray-500: #64748B;
+    --gray-900: #0F172A;
+    --danger: #DC2626;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    font-family: Tahoma, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+  body {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, #003F7F 50%, #001A3A 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 100vh;
+  }
+
+  .login-wrap {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  /* Logo area */
+  .login-logo {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .logo-icon {
+    width: 80px;
+    height: 80px;
+    background: #fff;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    padding: 8px;
+  }
+  .logo-icon svg { width: 64px; height: 64px; }
+  .logo-name {
+    font-size: 26px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+  }
+  .logo-name span { color: var(--accent); }
+  .logo-sub {
+    font-size: 13px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 4px;
+  }
+
+  /* Panel */
+  .panel {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 36px 36px 30px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+  }
+  .panel-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 4px;
+  }
+  .panel-sub {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-bottom: 26px;
+    line-height: 1.5;
+  }
+
+  .field { margin-bottom: 16px; }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    font-family: Tahoma, Arial, sans-serif;
+    font-size: 14px;
+    padding: 10px 13px;
+    border: 1.5px solid var(--gray-300);
+    border-radius: 7px;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0,114,198,0.15);
+    background: #fff;
+  }
+
+  .btn-login {
+    width: 100%;
+    margin-top: 8px;
+    padding: 12px;
+    border: none;
+    border-radius: 7px;
+    background: var(--primary);
+    color: #fff;
+    font-family: Tahoma, Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    letter-spacing: 0.01em;
+  }
+  .btn-login:hover { background: var(--primary-dark); }
+  .btn-login:active { transform: scale(0.99); }
+
+  .error-box {
+    background: #FEF2F2;
+    border: 1.5px solid #FECACA;
+    color: var(--danger);
+    font-size: 13.5px;
+    padding: 10px 14px;
+    border-radius: 7px;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .login-footer {
+    text-align: center;
+    margin-top: 20px;
+  }
+  .login-footer p {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+  }
+  .accent-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    vertical-align: middle;
+    margin: 0 4px;
+  }
+</style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-logo">
+      <div class="logo-icon">
+        <img src="/logo.png" alt="i-Tail Logo" style="width:64px;height:64px;object-fit:contain;" />
+      </div>
+      <div class="logo-name">i-Tail <span>Insight</span></div>
+      <div class="logo-sub">Daily Digest Platform</div>
+    </div>
+
+    <div class="panel">
+
+      <div id="errorBox" class="error-box" style="display:none">
+        ⚠️⚠️⚠️ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง
+      </div>
+
+      <form method="POST" action="/login">
+        <div class="field">
+          <label for="username">Account</label>
+          <input id="username" name="username" type="text" autocomplete="username" required autofocus placeholder="กรอก username" />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="กรอก password" />
+        </div>
+        <button type="submit" class="btn-login">🔐 LOGIN</button>
+      </form>
+    </div>
+
+    <div class="login-footer">
+      <p>i-Tail Insight <span class="accent-dot"></span> Daily Digest Platform <span class="accent-dot"></span> v2.0</p>
+    </div>
+  </div>
+
+  <script>
+    if (new URLSearchParams(location.search).get('error')) {
+      document.getElementById('errorBox').style.display = 'flex';
+    }
+  </script>
+</body>
+</html>
