@@ -167,15 +167,13 @@
   <div class="login-wrap">
     <div class="login-logo">
       <div class="logo-icon">
-        <img src="/logo.svg" alt="i-Tail Logo" style="width:64px;height:64px;object-fit:contain;" />
+        <img src="/logo.png" alt="i-Tail Logo" style="width:64px;height:64px;object-fit:contain;" />
       </div>
       <div class="logo-name">i-Tail <span>Insight</span></div>
       <div class="logo-sub">Daily Digest Platform</div>
     </div>
 
     <div class="panel">
-      <h1 class="panel-title">เข้าสู่ระบบ</h1>
-      <p class="panel-sub">สำหรับดูสรุปบทสนทนาประจำวันของกลุ่มไลน์</p>
 
       <div id="errorBox" class="error-box" style="display:none">
         ⚠️ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง
@@ -183,14 +181,14 @@
 
       <form method="POST" action="/login">
         <div class="field">
-          <label for="username">ชื่อผู้ใช้</label>
+          <label for="username">Account</label>
           <input id="username" name="username" type="text" autocomplete="username" required autofocus placeholder="กรอก username" />
         </div>
         <div class="field">
-          <label for="password">รหัสผ่าน</label>
+          <label for="password">Password</label>
           <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="กรอก password" />
         </div>
-        <button type="submit" class="btn-login">🔐 เข้าสู่ระบบ</button>
+        <button type="submit" class="btn-login">🔐 LOGIN</button>
       </form>
     </div>
 
