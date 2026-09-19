@@ -1734,7 +1734,7 @@
       <td>${esc(t.why || 'ไม่ระบุ')}</td>
       <td>${renderHow(t.how || '')}</td>
       <td class="ack-cell">
-        <button class="btn-ack ${isAcked ? 'acked' : ''}" onclick="toggleAck(${s.id},${idx},this)">${isAcked ? '✅ รับทราบ' : '👆'}</button>
+        <button class="btn-ack ${isAcked ? 'acked' : ''}" onclick="toggleAck(${s.id},${idx},this)">${isAcked ? '✅' : '👆'}</button>
         ${ackers ? `<div class="ack-names">${esc(ackers)}</div>` : ''}
       </td>
       <td class="ack-cell"><button class="btn btn-outline btn-xs" onclick="copyRow(${s.id},${idx})">📋</button></td>
