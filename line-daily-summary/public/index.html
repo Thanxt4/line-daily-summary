@@ -1702,7 +1702,12 @@
     function renderEntry(s, showGroup) {
       let parsed = null; try { parsed = JSON.parse(s.summary); } catch (e) { }
       const topics = parsed?.topics || [];
-      const imagesHtml = s.images && s.images.length ? `<div class="entry-images">${s.images.map(img => `<figure class="entry-image"><img src="${img.url}" alt="รูปภาพ" loading="lazy"/></figure>`).join('')}</div>` : '';
+      const imagesHtml=s.images&&s.images.length?`
+  <div style="padding:12px 20px;background:var(--gray-50);border-top:1px solid var(--gray-200)">
+    <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'flex':'none';this.textContent=this.textContent.includes('แสดง')?'🖼️ ซ่อนรูปภาพ (${s.images.length} รูป)':'🖼️ แสดงรูปภาพ (${s.images.length} รูป)'"
+      class="btn btn-outline btn-sm">🖼️ แสดงรูปภาพ (${s.images.length} รูป)</button>
+    <div class="entry-images" style="display:none;margin-top:12px">${s.images.map(img=>`<figure class="entry-image"><img src="${img.url}" alt="รูปภาพ" loading="lazy"/></figure>`).join('')}</div>
+  </div>`:'';
       const groupLabel = (showGroup && s.group_name) ? `<div class="group-badge">💬 ${esc(s.group_name)}</div>` : '';
       return `<div class="entry-card" data-summary-id="${s.id}">
     <div class="entry-header">
