@@ -90,6 +90,13 @@ db.exec(`
     PRIMARY KEY (account_id, group_id)
   );
 
+  -- Prompt settings (admin configurable)
+  CREATE TABLE IF NOT EXISTS prompt_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER
+  );
+
   -- Acknowledgement: per-topic per-user acknowledgement
   CREATE TABLE IF NOT EXISTS acknowledgements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,6 +112,27 @@ db.exec(`
 ['image_refs'].forEach(col => {
   try { db.exec(`ALTER TABLE summaries ADD COLUMN ${col} TEXT`); } catch(e){}
 });
+
+// Seed default prompt settings
+const DEFAULT_PROMPT_INTRO = `คุณคือผู้ช่วยสรุปบทสนทนากลุ่มไลน์ระดับมืออาชีพในองค์กรอุตสาหกรรม`;
+const DEFAULT_PROMPT_RULES = `- ใช้ภาษาไทยทางการในระดับรายงานธุรกิจ ห้ามใช้ภาษาพูด คำย่อแบบแชท หรือภาษาสแลง\n- เขียนให้ครบถ้วนและชัดเจน คนที่ไม่ได้อยู่ในบทสนทนาต้องเข้าใจได้ทันที\n- รวมประเด็นเดียวกันเป็นหัวข้อเดียว ไม่แยกซ้ำ`;
+const DEFAULT_PROMPT_HOW = `**บังคับเขียนแบบ numbered list เท่านั้น** แต่ละขั้นตอนขึ้นบรรทัดใหม่ รูปแบบ: "1. [ขั้นตอน]\n2. [ขั้นตอน]\n3. [ขั้นตอน]" ห้ามเขียนเป็น paragraph ยาวติดกัน ต้องมีอย่างน้อย 2 ข้อ แต่ละข้อเป็นประโยคภาษาทางการ`;
+
+function getPromptSetting(key, defaultVal) {
+  const row = db.prepare('SELECT value FROM prompt_settings WHERE key=?').get(key);
+  return row ? row.value : defaultVal;
+}
+function setPromptSetting(key, value) {
+  db.prepare('INSERT INTO prompt_settings (key, value, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at')
+    .run(key, value, Date.now());
+}
+
+// Seed defaults if not set
+[
+  ['prompt_intro', DEFAULT_PROMPT_INTRO],
+  ['prompt_rules', DEFAULT_PROMPT_RULES],
+  ['prompt_how', DEFAULT_PROMPT_HOW],
+].forEach(([k, v]) => { if (!db.prepare('SELECT key FROM prompt_settings WHERE key=?').get(k)) setPromptSetting(k, v); });
 
 // Seed default admin account if not exists
 function hashPassword(pw) {
@@ -209,7 +237,11 @@ async function summarizeDate(groupId, dateStr) {
 
   const conversation = rows.map(r => `${r.display_name || 'ไม่ทราบชื่อ'}: ${r.text}`).join('\n');
 
-  const promptText = `คุณคือผู้ช่วยสรุปบทสนทนากลุ่มไลน์ระดับมืออาชีพในองค์กรอุตสาหกรรม
+  const promptIntro = getPromptSetting('prompt_intro', DEFAULT_PROMPT_INTRO);
+  const promptRules = getPromptSetting('prompt_rules', DEFAULT_PROMPT_RULES);
+  const promptHow = getPromptSetting('prompt_how', DEFAULT_PROMPT_HOW);
+
+  const promptText = `${promptIntro}
 
 บทสนทนาต่อไปนี้มาจากกลุ่มไลน์งาน วันที่ ${dateStr}
 (ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีการส่งรูปภาพ)
@@ -221,17 +253,15 @@ ${conversation}
 **ภารกิจ:** วิเคราะห์และสรุปประเด็นสำคัญทั้งหมดตามหลัก 5W1H
 
 **กฎการเขียนที่เคร่งครัด:**
-- ใช้ภาษาไทยทางการในระดับรายงานธุรกิจ ห้ามใช้ภาษาพูด คำย่อแบบแชท หรือภาษาสแลง
-- เขียนให้ครบถ้วนและชัดเจน คนที่ไม่ได้อยู่ในบทสนทนาต้องเข้าใจได้ทันที
-- รวมประเด็นเดียวกันเป็นหัวข้อเดียว ไม่แยกซ้ำ
+${promptRules}
 
 **รายละเอียดแต่ละ field:**
-- **what**: ชื่อประเด็น/เหตุการณ์ที่เกิดขึ้น (ประโยคกริยานามที่กระชับ เช่น "การตรวจพบปัญหา X และดำเนินการแก้ไข")
+- **what**: ชื่อประเด็น/เหตุการณ์ที่เกิดขึ้น (ประโยคกริยานามที่กระชับ)
 - **who**: รายชื่อบุคคล/ทีม/แผนกที่เกี่ยวข้องทั้งหมด คั่นด้วยจุลภาค
-- **when**: วันที่/เวลาที่เกิดเหตุการณ์จริงในบทสนทนา (ไม่ใช่เวลาที่ส่งข้อความ) ถ้าระบุว่า "คืนนี้" หรือ "วันนี้" ให้ใช้ ${dateStr} ถ้าระบุวันที่ชัดเจนให้ใช้วันที่นั้น
+- **when**: วันที่/เวลาที่เกิดเหตุการณ์จริงในบทสนทนา (ไม่ใช่เวลาที่ส่งข้อความ) ถ้าระบุว่า "คืนนี้" หรือ "วันนี้" ให้ใช้ ${dateStr}
 - **where**: สถานที่/เครื่องจักร/ไลน์การผลิต/ห้องปฏิบัติการที่เกี่ยวข้อง
 - **why**: สาเหตุหรือวัตถุประสงค์ที่ทำให้เกิดกิจกรรมนี้
-- **how**: สรุปขั้นตอนการดำเนินงานและผลลัพธ์ **บังคับเขียนแบบ numbered list เท่านั้น** แต่ละขั้นตอนขึ้นบรรทัดใหม่ รูปแบบ: \"1. [ขั้นตอน]\\n2. [ขั้นตอน]\\n3. [ขั้นตอน]\" ห้ามเขียนเป็น paragraph ยาวติดกัน ต้องมีอย่างน้อย 2 ข้อ แต่ละข้อเป็นประโยคภาษาทางการ
+- **how**: ${promptHow}
 
 หากไม่มีข้อมูลในช่องใด ให้ใส่ "ไม่ระบุ"
 หากไม่มีสาระสำคัญทั้งวัน ให้ topics เป็น []
@@ -565,6 +595,30 @@ app.get('/api/acks/:summary_id', (req, res) => {
     WHERE a.summary_id = ?
   `).all(req.params.summary_id);
   res.json(rows);
+});
+
+// ---------- Prompt Settings API ----------
+app.get('/api/settings/prompt', requireAdmin, (req, res) => {
+  res.json({
+    intro: getPromptSetting('prompt_intro', DEFAULT_PROMPT_INTRO),
+    rules: getPromptSetting('prompt_rules', DEFAULT_PROMPT_RULES),
+    how: getPromptSetting('prompt_how', DEFAULT_PROMPT_HOW),
+  });
+});
+
+app.put('/api/settings/prompt', requireAdmin, (req, res) => {
+  const { intro, rules, how } = req.body;
+  if (intro !== undefined) setPromptSetting('prompt_intro', intro);
+  if (rules !== undefined) setPromptSetting('prompt_rules', rules);
+  if (how !== undefined) setPromptSetting('prompt_how', how);
+  res.json({ ok: true });
+});
+
+app.post('/api/settings/prompt/reset', requireAdmin, (req, res) => {
+  setPromptSetting('prompt_intro', DEFAULT_PROMPT_INTRO);
+  setPromptSetting('prompt_rules', DEFAULT_PROMPT_RULES);
+  setPromptSetting('prompt_how', DEFAULT_PROMPT_HOW);
+  res.json({ ok: true });
 });
 
 // ---------- Admin: Account Management ----------
