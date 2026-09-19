@@ -328,13 +328,7 @@
         <button class="btn btn-primary btn-sm" onclick="loadSummaries()">🔍</button>
       </div>
 
-      <div class="sort-bar">
-        <span>เรียงตาม:</span>
-        <button class="btn-sort active" id="sort-date" onclick="setSortField('date',this)">📅 วันที่</button>
-        <button class="btn-sort" id="sort-who" onclick="setSortField('who',this)">👤 Who</button>
-        <button class="btn-sort" id="sort-what" onclick="setSortField('what',this)">📋 What</button>
-        <button class="btn-sort" id="sort-where" onclick="setSortField('where',this)">📍 Where</button>
-      </div>
+  
 
       <div class="export-bar">
         <button class="btn btn-outline btn-sm" onclick="exportExcel('group')">📊 Export Excel</button>
@@ -379,13 +373,7 @@
         <button class="btn btn-primary btn-sm" onclick="loadAllSummaries()">🔍 ค้นหา</button>
       </div>
 
-      <div class="sort-bar">
-        <span>เรียงตาม:</span>
-        <button class="btn-sort active" id="allsort-date" onclick="setAllSortField('date',this)">📅 วันที่</button>
-        <button class="btn-sort" id="allsort-who" onclick="setAllSortField('who',this)">👤 Who</button>
-        <button class="btn-sort" id="allsort-what" onclick="setAllSortField('what',this)">📋 What</button>
-        <button class="btn-sort" id="allsort-where" onclick="setAllSortField('where',this)">📍 Where</button>
-      </div>
+ 
     </div>
 
     <div id="allContent"><div class="state-msg">กำลังโหลด...</div></div>
@@ -825,7 +813,7 @@ function renderTopicsTable(s,topics){
       <td>${esc(t.why||'ไม่ระบุ')}</td>
       <td>${renderHow(t.how||'')}</td>
       <td class="ack-cell">
-        <button class="btn-ack ${isAcked?'acked':''}" onclick="toggleAck(${s.id},${idx},this)">${isAcked?'✅ รับทราบ':'👆 รับทราบ'}</button>
+        <button class="btn-ack ${isAcked?'acked':''}" onclick="toggleAck(${s.id},${idx},this)">${isAcked?'✅ รับทราบ':'👆'}</button>
         ${ackers?`<div class="ack-names">${esc(ackers)}</div>`:''}
       </td>
       <td class="ack-cell"><button class="btn btn-outline btn-xs" onclick="copyRow(${s.id},${idx})">📋</button></td>
