@@ -1674,6 +1674,9 @@
       let parsed = null; try { parsed = JSON.parse(s.summary); } catch (e) { }
       const topics = parsed?.topics || [];
       const groupLabel = (showGroup && s.group_name) ? `<div class="group-badge">💬 ${esc(s.group_name)}</div>` : '';
+      const adminActions = sessionData.isAdmin ? `
+        <button class="btn btn-outline btn-xs" onclick="deleteEntryImages('${esc(s.group_id)}','${esc(s.date)}',this)">🗑️ ลบรูป</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteEntrySummary('${esc(s.group_id)}','${esc(s.date)}',this)">🗑️ ลบสรุป</button>` : '';
       return `<div class="entry-card" data-summary-id="${s.id}">
     <div class="entry-header">
       <div class="entry-date-badge">
@@ -1682,6 +1685,7 @@
       </div>
       <div class="entry-header-actions">
         <button class="btn btn-outline btn-xs" onclick="copyAllTopics(${s.id})">📋 Copy ทั้งหมด</button>
+        ${adminActions}
       </div>
     </div>
     <div class="entry-body">${topics.length === 0 ? `<div class="empty-state" style="padding:28px"><p>ไม่มีสาระสำคัญ</p></div>` : renderTopicsTable(s, topics)}</div>
@@ -1925,6 +1929,30 @@
         const r = await api(`/api/admin/accounts/${id}`, { method: 'DELETE' });
         if (!r.ok) throw new Error((await r.json()).error || 'ลบไม่สำเร็จ');
         loadAdminData();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function deleteEntryImages(groupId, date) {
+      if (!confirm(`ยืนยันลบรูปภาพทั้งหมดของวันที่ ${date}?\nลบแล้วกู้คืนไม่ได้`)) return;
+      try {
+        const params = new URLSearchParams({ group_id: groupId, date });
+        const r = await api(`/api/admin/images?${params}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'ลบรูปไม่สำเร็จ');
+        alert(`✅ ลบรูปแล้ว ${data.freedFiles} ไฟล์ (${data.freedMB} MB)`);
+      } catch (e) { alert(e.message); }
+    }
+
+    async function deleteEntrySummary(groupId, date) {
+      if (!confirm(`ยืนยันลบข้อความสรุปของวันที่ ${date}?\nลบแล้วกู้คืนไม่ได้ (ข้อความแชทดิบจะยังอยู่)`)) return;
+      try {
+        const params = new URLSearchParams({ group_id: groupId, date });
+        const r = await api(`/api/admin/summary?${params}`, { method: 'DELETE' });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'ลบสรุปไม่สำเร็จ');
+        alert(`✅ ลบสรุปของวันที่ ${date} แล้ว`);
+        if (typeof loadSummaries === 'function' && currentGroupId) loadSummaries();
+        if (typeof loadAllSummaries === 'function' && document.getElementById('allContent')) loadAllSummaries();
       } catch (e) { alert(e.message); }
     }
 
