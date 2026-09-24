@@ -54,6 +54,17 @@ db.exec(`
     group_name TEXT
   );
 
+  -- Historical image records (no longer written to; kept so old saved images
+  -- can still be looked up and cleaned up per date/group)
+  CREATE TABLE IF NOT EXISTS images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    date TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_images_group_date ON images(group_id, date);
+
   CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
@@ -641,24 +652,41 @@ app.delete('/api/admin/groups/:group_id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Admin: One-time cleanup of old saved images (frees volume space) ----------
-app.delete('/api/admin/cleanup-old-images', requireAdmin, (req, res) => {
+// ---------- Admin: Delete saved images for one group + date ----------
+app.delete('/api/admin/images', requireAdmin, (req, res) => {
+  const { group_id, date } = req.query;
+  if (!group_id || !date) return res.status(400).json({ error: 'group_id and date are required' });
   const dir = path.join(DB_DIR, 'images');
   let freedFiles = 0, freedBytes = 0;
   try {
-    if (fs.existsSync(dir)) {
-      for (const name of fs.readdirSync(dir)) {
-        const p = path.join(dir, name);
-        try {
-          const size = fs.statSync(p).size;
+    const rows = db.prepare(`SELECT message_id FROM images WHERE group_id=? AND date=?`).all(group_id, date);
+    for (const r of rows) {
+      const p = path.join(dir, `${r.message_id}.jpg`);
+      try {
+        if (fs.existsSync(p)) {
+          freedBytes += fs.statSync(p).size;
           fs.unlinkSync(p);
           freedFiles++;
-          freedBytes += size;
-        } catch (e) { /* skip file that can't be removed */ }
-      }
-      try { fs.rmdirSync(dir); } catch (e) { /* dir not empty or already gone, ignore */ }
+        }
+      } catch (e) { /* skip file that can't be removed */ }
     }
+    db.prepare(`DELETE FROM images WHERE group_id=? AND date=?`).run(group_id, date);
     res.json({ ok: true, freedFiles, freedMB: +(freedBytes / 1024 / 1024).toFixed(2) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- Admin: Delete the AI summary text for one group + date ----------
+app.delete('/api/admin/summary', requireAdmin, (req, res) => {
+  const { group_id, date } = req.query;
+  if (!group_id || !date) return res.status(400).json({ error: 'group_id and date are required' });
+  try {
+    const row = db.prepare(`SELECT id FROM summaries WHERE group_id=? AND date=?`).get(group_id, date);
+    if (!row) return res.status(404).json({ error: 'ไม่พบสรุปของวันนี้' });
+    db.prepare(`DELETE FROM acknowledgements WHERE summary_id=?`).run(row.id);
+    db.prepare(`DELETE FROM summaries WHERE id=?`).run(row.id);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
