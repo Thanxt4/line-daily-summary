@@ -641,6 +641,29 @@ app.delete('/api/admin/groups/:group_id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Admin: One-time cleanup of old saved images (frees volume space) ----------
+app.delete('/api/admin/cleanup-old-images', requireAdmin, (req, res) => {
+  const dir = path.join(DB_DIR, 'images');
+  let freedFiles = 0, freedBytes = 0;
+  try {
+    if (fs.existsSync(dir)) {
+      for (const name of fs.readdirSync(dir)) {
+        const p = path.join(dir, name);
+        try {
+          const size = fs.statSync(p).size;
+          fs.unlinkSync(p);
+          freedFiles++;
+          freedBytes += size;
+        } catch (e) { /* skip file that can't be removed */ }
+      }
+      try { fs.rmdirSync(dir); } catch (e) { /* dir not empty or already gone, ignore */ }
+    }
+    res.json({ ok: true, freedFiles, freedMB: +(freedBytes / 1024 / 1024).toFixed(2) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- Cron ----------
 cron.schedule('55 23 * * *', async () => {
   const today = thaiDateString(Date.now());
