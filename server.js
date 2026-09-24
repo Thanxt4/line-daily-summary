@@ -27,9 +27,6 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'itail-insight-secret-chang
 const DB_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const db = new Database(path.join(DB_DIR, 'data.db'));
 
-const IMAGES_DIR = path.join(DB_DIR, 'images');
-if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
-
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +46,6 @@ db.exec(`
     summary TEXT,
     message_count INTEGER,
     created_at INTEGER,
-    image_refs TEXT,
     UNIQUE(group_id, date)
   );
 
@@ -57,15 +53,6 @@ db.exec(`
     group_id TEXT PRIMARY KEY,
     group_name TEXT
   );
-
-  CREATE TABLE IF NOT EXISTS images (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    group_id TEXT NOT NULL,
-    message_id TEXT NOT NULL,
-    ts INTEGER NOT NULL,
-    date TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_images_group_date ON images(group_id, date);
 
   CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
@@ -107,11 +94,6 @@ db.exec(`
     UNIQUE(summary_id, topic_index, account_id)
   );
 `);
-
-// Migrations
-['image_refs'].forEach(col => {
-  try { db.exec(`ALTER TABLE summaries ADD COLUMN ${col} TEXT`); } catch(e){}
-});
 
 // Seed default prompt settings
 const DEFAULT_PROMPT_INTRO = `คุณคือผู้ช่วยสรุปบทสนทนากลุ่มไลน์ระดับมืออาชีพในองค์กรอุตสาหกรรม`;
@@ -244,7 +226,7 @@ async function summarizeDate(groupId, dateStr) {
   const promptText = `${promptIntro}
 
 บทสนทนาต่อไปนี้มาจากกลุ่มไลน์งาน วันที่ ${dateStr}
-(ข้อความที่ขึ้นต้นด้วย [ส่งรูปภาพ: xxx] คือตำแหน่งที่มีการส่งรูปภาพ)
+(ข้อความ [ส่งรูปภาพ] คือตำแหน่งที่มีการส่งรูปภาพ)
 
 --- บทสนทนา ---
 ${conversation}
@@ -281,14 +263,10 @@ ${promptRules}
     summaryText = JSON.stringify({ topics: [], raw: rawText });
   }
 
-  // Collect image refs for this date
-  const imageRows = db.prepare(`SELECT message_id FROM images WHERE group_id=? AND date=? ORDER BY ts ASC`).all(groupId, dateStr);
-  const imageRefs = imageRows.map(r => ({ message_id: r.message_id }));
-
   db.prepare(
-    `INSERT INTO summaries (group_id, date, summary, message_count, created_at, image_refs) VALUES (?,?,?,?,?,?)
-     ON CONFLICT(group_id, date) DO UPDATE SET summary=excluded.summary, message_count=excluded.message_count, created_at=excluded.created_at, image_refs=excluded.image_refs`
-  ).run(groupId, dateStr, summaryText, rows.length, Date.now(), JSON.stringify(imageRefs));
+    `INSERT INTO summaries (group_id, date, summary, message_count, created_at) VALUES (?,?,?,?,?)
+     ON CONFLICT(group_id, date) DO UPDATE SET summary=excluded.summary, message_count=excluded.message_count, created_at=excluded.created_at`
+  ).run(groupId, dateStr, summaryText, rows.length, Date.now());
 
   return summaryText;
 }
@@ -318,20 +296,9 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
             .run(groupId, userId, displayName, text, ts, dateStr);
           await ensureGroupName(groupId);
         } else if (event.message?.type === 'image') {
-          const messageId = event.message.id;
           const displayName = await getDisplayName(groupId, userId);
           db.prepare(`INSERT INTO messages (group_id, user_id, display_name, text, ts, date) VALUES (?,?,?,?,?,?)`)
-            .run(groupId, userId, displayName, `[ส่งรูปภาพ: ${messageId}]`, ts, dateStr);
-          try {
-            const contentResp = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
-              headers: { Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-            });
-            if (contentResp.ok) {
-              const buffer = Buffer.from(await contentResp.arrayBuffer());
-              fs.writeFileSync(path.join(IMAGES_DIR, `${messageId}.jpg`), buffer);
-              db.prepare(`INSERT INTO images (group_id, message_id, ts, date) VALUES (?,?,?,?)`).run(groupId, messageId, ts, dateStr);
-            }
-          } catch(err) { console.error('[image]', err.message); }
+            .run(groupId, userId, displayName, `[ส่งรูปภาพ]`, ts, dateStr);
           await ensureGroupName(groupId);
         }
       }
@@ -395,15 +362,6 @@ app.get('/api/session', (req, res) => {
 
 app.use(requireAuth);
 
-// ---------- Media ----------
-app.get('/media/:filename', (req, res) => {
-  const filename = req.params.filename;
-  if (!/^[a-zA-Z0-9_-]+\.jpg$/.test(filename)) return res.status(400).send('invalid filename');
-  const filePath = path.join(IMAGES_DIR, filename);
-  if (!fs.existsSync(filePath)) return res.status(404).send('not found');
-  res.sendFile(filePath);
-});
-
 // ---------- Groups API ----------
 app.get('/api/groups', (req, res) => {
   let rows;
@@ -442,12 +400,7 @@ app.get('/api/summaries', (req, res) => {
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const rows = db.prepare(`SELECT * FROM summaries ${whereClause} ORDER BY date DESC`).all(...params);
 
-  const withImages = rows.map(r => {
-    let images = [];
-    try { images = r.image_refs ? JSON.parse(r.image_refs) : []; } catch(e) {}
-    return { ...r, images: images.map(img => ({ ...img, url: `/media/${img.message_id}.jpg` })) };
-  });
-  res.json(withImages);
+  res.json(rows);
 });
 
 // ---------- All-groups summary (for "ภาพรวมทั้งหมด") ----------
@@ -480,11 +433,7 @@ app.get('/api/summaries/all', (req, res) => {
     ORDER BY s.date DESC
   `).all(...params);
 
-  let result = rows.map(r => {
-    let images = [];
-    try { images = r.image_refs ? JSON.parse(r.image_refs) : []; } catch(e) {}
-    return { ...r, images: images.map(img => ({ ...img, url: `/media/${img.message_id}.jpg` })) };
-  });
+  let result = rows;
 
   // Filter by who
   if (who && who.trim()) {
@@ -687,7 +636,6 @@ app.delete('/api/admin/groups/:group_id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM account_group_access WHERE group_id=?').run(group_id);
   db.prepare('DELETE FROM acknowledgements WHERE summary_id IN (SELECT id FROM summaries WHERE group_id=?)').run(group_id);
   db.prepare('DELETE FROM summaries WHERE group_id=?').run(group_id);
-  db.prepare('DELETE FROM images WHERE group_id=?').run(group_id);
   db.prepare('DELETE FROM messages WHERE group_id=?').run(group_id);
   db.prepare('DELETE FROM groups WHERE group_id=?').run(group_id);
   res.json({ ok: true });
