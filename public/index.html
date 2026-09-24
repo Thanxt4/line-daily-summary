@@ -853,35 +853,6 @@
       transform: translateX(-50%) translateY(0);
     }
 
-    /* IMAGES */
-    .entry-images {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      padding: 16px 20px;
-      background: var(--gray-50);
-      border-top: 1px solid var(--gray-200);
-    }
-
-    .entry-image {
-      width: 140px;
-    }
-
-    .entry-image img {
-      width: 100%;
-      height: 100px;
-      object-fit: cover;
-      border-radius: 6px;
-      border: 1px solid var(--gray-200);
-      display: block;
-    }
-
-    .entry-image figcaption {
-      font-size: 11px;
-      color: var(--gray-500);
-      margin-top: 4px;
-    }
-
     /* STATE / EMPTY */
     .state-msg {
       color: var(--gray-500);
@@ -1702,7 +1673,6 @@
     function renderEntry(s, showGroup) {
       let parsed = null; try { parsed = JSON.parse(s.summary); } catch (e) { }
       const topics = parsed?.topics || [];
-      const imagesHtml = s.images && s.images.length ? `<div class="entry-images">${s.images.map(img => `<figure class="entry-image"><img src="${img.url}" alt="รูปภาพ" loading="lazy"/></figure>`).join('')}</div>` : '';
       const groupLabel = (showGroup && s.group_name) ? `<div class="group-badge">💬 ${esc(s.group_name)}</div>` : '';
       return `<div class="entry-card" data-summary-id="${s.id}">
     <div class="entry-header">
@@ -1715,7 +1685,6 @@
       </div>
     </div>
     <div class="entry-body">${topics.length === 0 ? `<div class="empty-state" style="padding:28px"><p>ไม่มีสาระสำคัญ</p></div>` : renderTopicsTable(s, topics)}</div>
-    ${imagesHtml}
   </div>`;
     }
 
@@ -1960,7 +1929,7 @@
     }
 
     async function deleteGroup(groupId, groupName) {
-      if (!confirm(`ยืนยันลบกลุ่ม "${groupName}"?\nข้อมูลทั้งหมด (ข้อความ, สรุป, รูปภาพ) จะถูกลบถาวร`)) return;
+      if (!confirm(`ยืนยันลบกลุ่ม "${groupName}"?\nข้อมูลทั้งหมด (ข้อความ, สรุป) จะถูกลบถาวร`)) return;
       try {
         const r = await api(`/api/admin/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
         if (!r.ok) throw new Error((await r.json()).error || 'ลบกลุ่มไม่สำเร็จ');
