@@ -1109,7 +1109,7 @@
       <div class="nav-section">
         <div class="nav-section-label">ภาพรวม</div>
         <a class="nav-item" data-view="all" onclick="showView('all')">
-          <span class="icon">🗂️</span> ภาพรวมทุกกลุ่ม
+          <span class="icon"></span> ภาพรวมทุกกลุ่ม
         </a>
       </div>
 
@@ -1126,7 +1126,7 @@
           <span class="icon">⚙️</span> จัดการสิทธิ์ & ผู้ใช้
         </a>
         <a class="nav-item" data-view="prompt" onclick="showView('prompt')">
-          <span class="icon">🤖</span> ตั้งค่า AI Prompt
+          <span class="icon"></span> ตั้งค่า AI Prompt
         </a>
       </div>
 
@@ -1139,7 +1139,7 @@
           </div>
         </div>
         <form method="POST" action="/logout">
-          <button type="submit" class="btn-logout">🚪 ออกจากระบบ</button>
+          <button type="submit" class="btn-logout">ออกจากระบบ</button>
         </form>
       </div>
     </div>
@@ -1156,8 +1156,8 @@
         </div>
         <!-- Desktop actions always visible; mobile hidden behind toggle -->
         <div class="header-actions" id="groupHeaderActions">
-          <button class="btn btn-outline" id="fixNamesBtn" disabled>🔧 ซ่อมชื่อสมาชิก</button>
-          <button class="btn btn-accent" id="summarizeBtn" disabled>⚡ สรุปวันนี้ทันที</button>
+          <button class="btn btn-outline" id="fixNamesBtn" disabled>แก้ไขชื่อสมาชิก</button>
+          <button class="btn btn-accent" id="summarizeBtn" disabled>สรุปวันนี้ทันที</button>
         </div>
       </div>
 
@@ -1168,8 +1168,8 @@
         <!-- Mobile: show fix/summarize buttons here -->
         <div class="mobile-action-row" id="mobileActionRow"
           style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <button class="btn btn-outline btn-sm" id="fixNamesBtnM" disabled>🔧 ซ่อมชื่อสมาชิก</button>
-          <button class="btn btn-accent btn-sm" id="summarizeBtnM" disabled>⚡ สรุปวันนี้ทันที</button>
+          <button class="btn btn-outline btn-sm" id="fixNamesBtnM" disabled>แก้ไขชื่อสมาชิก</button>
+          <button class="btn btn-accent btn-sm" id="summarizeBtnM" disabled>สรุปวันนี้ทันที</button>
         </div>
 
         <div class="filter-bar">
@@ -1181,8 +1181,8 @@
           <label>จาก</label><input type="date" id="fromDate" />
           <label>ถึง</label><input type="date" id="toDate" />
           <span class="filter-sep">|</span>
-          <label>👤 Who:</label><input type="text" id="groupWhoFilter" placeholder="ชื่อ..." style="min-width:110px" />
-          <label>📍 Where:</label><input type="text" id="groupWhereFilter" placeholder="สถานที่..."
+          <label>Who:</label><input type="text" id="groupWhoFilter" placeholder="ชื่อ..." style="min-width:110px" />
+          <label>Where:</label><input type="text" id="groupWhereFilter" placeholder="สถานที่..."
             style="min-width:110px" />
           <button class="btn btn-primary btn-sm" onclick="loadSummaries()">🔍</button>
         </div>
@@ -1190,8 +1190,8 @@
 
 
         <div class="export-bar">
-          <button class="btn btn-outline btn-sm" onclick="exportExcel('group')">📊 Export Excel</button>
-          <button class="btn btn-outline btn-sm" onclick="exportPDF('group')">📄 Export PDF</button>
+          <button class="btn btn-outline btn-sm" onclick="exportExcel('group')">Export Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="exportPDF('group')">Export PDF</button>
         </div>
       </div>
 
@@ -1207,12 +1207,12 @@
     <section class="view" id="view-all">
       <div class="page-header">
         <div>
-          <h2 class="page-title">🗂️ ภาพรวมทุกกลุ่ม</h2>
+          <h2 class="page-title">ภาพรวมทุกกลุ่ม</h2>
           <p class="page-sub">รวมประเด็นสำคัญจากทุกกลุ่มไลน์ที่คุณมีสิทธิ์เข้าถึง</p>
         </div>
         <div class="header-actions">
-          <button class="btn btn-outline btn-sm" onclick="exportExcel('all')">📊 Export Excel</button>
-          <button class="btn btn-outline btn-sm" onclick="exportPDF('all')">📄 Export PDF</button>
+          <button class="btn btn-outline btn-sm" onclick="exportExcel('all')">Export Excel</button>
+          <button class="btn btn-outline btn-sm" onclick="exportPDF('all')">Export PDF</button>
         </div>
       </div>
 
@@ -1228,8 +1228,8 @@
           <label>จาก</label><input type="date" id="allFromDate" />
           <label>ถึง</label><input type="date" id="allToDate" />
           <span class="filter-sep">|</span>
-          <label>👤 Who:</label><input type="text" id="allWhoFilter" placeholder="ชื่อ..." style="min-width:110px" />
-          <label>📍 Where:</label><input type="text" id="allWhereFilter" placeholder="สถานที่..."
+          <label>Who:</label><input type="text" id="allWhoFilter" placeholder="ชื่อ..." style="min-width:110px" />
+          <label>Where:</label><input type="text" id="allWhereFilter" placeholder="สถานที่..."
             style="min-width:110px" />
           <button class="btn btn-primary btn-sm" onclick="loadAllSummaries()">🔍 ค้นหา</button>
         </div>
@@ -1316,12 +1316,12 @@
     <section class="view" id="view-prompt">
       <div class="page-header">
         <div>
-          <h2 class="page-title">🤖 ตั้งค่า AI Prompt</h2>
+          <h2 class="page-title">ตั้งค่า AI Prompt</h2>
           <p class="page-sub">กำหนดรูปแบบและสไตล์การสรุปบทสนทนาของ AI</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-outline btn-sm" onclick="resetPrompt()">↩️ Reset เป็นค่าเริ่มต้น</button>
-          <button class="btn btn-primary" onclick="savePrompt()">💾 บันทึก</button>
+          <button class="btn btn-primary" onclick="savePrompt()">บันทึก</button>
         </div>
       </div>
 
@@ -1336,7 +1336,7 @@
 
         <div class="form-field" style="margin-bottom:20px">
           <label style="font-size:14px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;display:block">
-            🎯 บทบาท AI (Intro)
+            บทบาท AI (Intro)
             <span style="font-weight:400;font-size:12px;color:var(--gray-500);margin-left:8px">บอก AI
               ว่าเป็นใครและบริบทการทำงาน</span>
           </label>
@@ -1347,7 +1347,7 @@
 
         <div class="form-field" style="margin-bottom:20px">
           <label style="font-size:14px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;display:block">
-            📋 กฎการเขียน (Rules)
+            กฎการเขียน (Rules)
             <span
               style="font-weight:400;font-size:12px;color:var(--gray-500);margin-left:8px">กำหนดสไตล์ภาษาและข้อห้ามต่างๆ
               (แต่ละกฎขึ้นบรรทัดใหม่ด้วย \n)</span>
@@ -1359,7 +1359,7 @@
 
         <div class="form-field" style="margin-bottom:24px">
           <label style="font-size:14px;font-weight:700;color:var(--primary-dark);margin-bottom:8px;display:block">
-            🔢 รูปแบบช่อง "How" (อย่างไร)
+            รูปแบบช่อง "How" (อย่างไร)
             <span
               style="font-weight:400;font-size:12px;color:var(--gray-500);margin-left:8px">กำหนดว่าให้สรุปขั้นตอนแบบไหน</span>
           </label>
@@ -1377,11 +1377,11 @@
 
         <!-- Preset Templates -->
         <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--gray-200)">
-          <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:12px">📦 เทมเพลตสำเร็จรูป</div>
+          <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:12px">เทมเพลตสำเร็จรูป</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="applyTemplate('formal')">📄 ทางการ (ค่าเริ่มต้น)</button>
-            <button class="btn btn-outline btn-sm" onclick="applyTemplate('brief')">⚡ กระชับ (สั้น)</button>
-            <button class="btn btn-outline btn-sm" onclick="applyTemplate('detail')">🔬 ละเอียด (ครบทุกข้อ)</button>
+            <button class="btn btn-outline btn-sm" onclick="applyTemplate('formal')">ทางการ (ค่าเริ่มต้น)</button>
+            <button class="btn btn-outline btn-sm" onclick="applyTemplate('brief')">กระชับ (สั้น)</button>
+            <button class="btn btn-outline btn-sm" onclick="applyTemplate('detail')">ละเอียด (ครบทุกข้อ)</button>
             <button class="btn btn-outline btn-sm" onclick="applyTemplate('action')">✅ Action Item (เน้น How)</button>
           </div>
         </div>
@@ -1680,11 +1680,11 @@
       return `<div class="entry-card" data-summary-id="${s.id}">
     <div class="entry-header">
       <div class="entry-date-badge">
-        <span class="date-icon">📅</span>
+        <span class="date-icon"></span>
         <div>${groupLabel}<div class="entry-date">${formatThaiDate(s.date)}</div><div class="entry-meta">${s.message_count || 0} ข้อความ · ${topics.length} ประเด็น</div></div>
       </div>
       <div class="entry-header-actions">
-        <button class="btn btn-outline btn-xs" onclick="copyAllTopics(${s.id})">📋 Copy ทั้งหมด</button>
+        <button class="btn btn-outline btn-xs" onclick="copyAllTopics(${s.id})">Copy ทั้งหมด</button>
         ${adminActions}
       </div>
     </div>
@@ -1887,9 +1887,9 @@
       <td><strong>${esc(a.username)}</strong>${selfNote}</td>
       <td>${esc(a.display_name)}</td>
       <td>${badge}</td>
-      <td><button class="btn btn-primary btn-xs" onclick="openAccessModal(${a.id},'${esc(a.display_name)}')">🔐 กลุ่มที่เข้าถึง</button></td>
+      <td><button class="btn btn-primary btn-xs" onclick="openAccessModal(${a.id},'${esc(a.display_name)}')">กลุ่มที่เข้าถึง</button></td>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-outline btn-xs" onclick="openEditModal(${a.id},'${esc(a.username)}','${esc(a.display_name)}',${a.is_admin})">✏️ แก้ไข</button>
+        <button class="btn btn-outline btn-xs" onclick="openEditModal(${a.id},'${esc(a.username)}','${esc(a.display_name)}',${a.is_admin})">แก้ไข</button>
         ${a.id !== myAccountId ? `<button class="btn btn-danger btn-xs" onclick="deleteAccount(${a.id},'${esc(a.username)}')">🗑️ ลบ</button>` : ''}
       </td>
     </tr>`;
@@ -1983,7 +1983,7 @@
     </div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('editModal').remove()">ยกเลิก</button>
-      <button class="btn btn-primary btn-sm" onclick="saveEditAccount(${id})">💾 บันทึก</button>
+      <button class="btn btn-primary btn-sm" onclick="saveEditAccount(${id})">บันทึก</button>
     </div>
   </div>`;
       document.body.appendChild(modal);
@@ -2014,12 +2014,12 @@
       const groupsHtml = !groups.length ? '<p style="color:var(--gray-500);font-size:13px">ยังไม่มีกลุ่มในระบบ</p>'
         : `<div class="access-grid">${groups.map(g => `<div class="access-item"><input type="checkbox" id="ag_${accountId}_${g.group_id}" ${allowed.has(g.group_id) ? 'checked' : ''}/><label for="ag_${accountId}_${g.group_id}">${esc(g.group_name || g.group_id)}</label></div>`).join('')}</div>`;
       modal.innerHTML = `<div style="background:#fff;border-radius:10px;padding:28px;max-width:500px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,.2)">
-    <h3 style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:6px">🔐 กำหนดสิทธิ์: ${esc(displayName)}</h3>
+    <h3 style="font-size:16px;font-weight:700;color:var(--primary-dark);margin-bottom:6px">กำหนดสิทธิ์: ${esc(displayName)}</h3>
     <p style="font-size:12.5px;color:var(--gray-500);margin-bottom:16px">เลือกกลุ่มไลน์ที่ผู้ใช้นี้เข้าถึงได้</p>
     ${groupsHtml}
     <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('accessModal').remove()">ยกเลิก</button>
-      <button class="btn btn-primary btn-sm" onclick="saveAccess(${accountId})">💾 บันทึกสิทธิ์</button>
+      <button class="btn btn-primary btn-sm" onclick="saveAccess(${accountId})">บันทึกสิทธิ์</button>
     </div>
   </div>`;
       document.body.appendChild(modal);
